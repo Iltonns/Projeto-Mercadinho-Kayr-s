@@ -1,27 +1,50 @@
 <!-- templates/cadastro.html -->
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
-    <title>Cadastro de Usuário</title>
+    <meta charset="UTF-8">
+    <title>Cadastro - Sistema Loja</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .login-container {
+            width: 100%;
+            max-width: 400px;
+            margin: 5rem auto;
+            padding: 2rem;
+            background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-radius: var(--borda-radius);
+        }
+    </style>
 </head>
 <body>
-    <h2>Cadastro de Usuário</h2>
-    <form method="post">
-        <label>Usuário:</label>
-        <input type="text" name="username" required><br>
-        <label>Senha:</label>
-        <input type="password" name="password" required><br>
-        <button type="submit">Cadastrar</button>
-    </form>
-    <a href="{{ url_for('login') }}">Voltar ao Login</a>
-    {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <ul>
-        {% for message in messages %}
-          <li>{{ message }}</li>
-        {% endfor %}
-        </ul>
-      {% endif %}
-    {% endwith %}
+    <main>
+        <div class="login-container">
+            <h2>Criar Nova Conta</h2>
+            
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST">
+                <div class="form-group">
+                    <label for="username">Usuário:</label>
+                    <input type="text" id="username" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Senha:</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%;">Cadastrar</button>
+            </form>
+            <p style="text-align: center; margin-top: 1rem;">
+                Já tem uma conta? <a href="{{ url_for('login') }}">Faça login</a>
+            </p>
+        </div>
+    </main>
 </body>
 </html>
