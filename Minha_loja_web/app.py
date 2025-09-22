@@ -1,260 +1,584 @@
 # ==============================================================================
-# 1. IMPORTS
+# 1. IMPORTS MELHORADOS
 # ==============================================================================
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from datetime import datetime
 from werkzeug.security import check_password_hash
 import logica_banco as db
+import re
+import os
 
 # ==============================================================================
-# 2. CONFIGURAÇÃO INICIAL DA APLICAÇÃO E EXTENSÕES
+# 2. CONFIGURAÇÃO INICIAL DA APLICAÇÃO E EXTENSÕES MELHORADA
 # ==============================================================================
 app = Flask(__name__)
-app.secret_key = 'sua_chave_secreta_pode_ser_qualquer_coisa'
+app.secret_key = os.environ.get('SECRET_KEY', 'sua_chave_secreta_super_segura_aqui_2024')
+
+# Configurações de segurança
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = False  # True em produção com HTTPS
+app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hora
 
 # Configuração do Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'login'  # Rota para redirecionar se não estiver logado
+login_manager.login_view = 'login'
 login_manager.login_message = "Por favor, faça login para acessar esta página."
-login_manager.login_message_category = "info"
-
-# Em app.py, adicione esta rota junto com as de login/logout
-
+login_manager.login_message_category = "warning"
 
 # ==============================================================================
-# 3. FUNÇÕES ESSENCIAIS DO FLASK-LOGIN
+# 3. FUNÇÕES AUXILIARES DE SEGURANÇA
+# ==============================================================================
+def sanitizar_input(texto):
+    """Remove caracteres perigosos"""
+    if not texto:
+        return ""
+    texto = re.sub(r'<[^>]*>', '', texto)
+    texto = texto.strip()
+    return texto
+
+def validar_email(email):
+    """Valida formato de email"""
+    if not email:
+        return True
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
+def validar_senha(senha):
+    """Valida força da senha"""
+    if len(senha) < 6:
+        return False, "Senha deve ter pelo menos 6 caracteres"
+    return True, ""
+
+# ==============================================================================
+# 4. FUNÇÕES ESSENCIAIS DO FLASK-LOGIN
 # ==============================================================================
 @login_manager.user_loader
 def load_user(user_id):
     """Função ESSENCIAL para o Flask-Login: diz como carregar um usuário a partir do ID."""
-    return db.get_user_by_id(int(user_id))
+    try:
+        return db.get_user_by_id(int(user_id))
+    except (ValueError, TypeError):
+        return None
 
 # ==============================================================================
-# 4. PROCESSADORES DE CONTEXTO
+# 5. MIDDLEWARE E PROCESSADORES DE CONTEXTO
 # ==============================================================================
+@app.before_request
+def before_request():
+    """Validações globais antes de cada requisição"""
+    # Proteção básica contra dados maliciosos em POST
+    if request.method == 'POST':
+        for key, value in request.form.items():
+            if len(str(value)) > 1000:
+                flash('Dados enviados são muito grandes!', 'danger')
+                return redirect(url_for('index'))
+
 @app.context_processor
-def inject_current_year():
-    """Injeta o ano atual em todos os templates para o rodapé."""
-    return {'current_year': datetime.utcnow().year}
+def inject_template_vars():
+    """Injeta variáveis em todos os templates"""
+    return {
+        'current_year': datetime.utcnow().year,
+        'current_user': current_user
+    }
 
 # ==============================================================================
-# 5. ROTAS DA APLICAÇÃO
+# 6. HANDLERS DE ERRO PROFISSIONAIS
 # ==============================================================================
+@app.errorhandler(404)
+def pagina_nao_encontrada(error):
+    return render_template('errors/404.html'), 404
 
-# --- ROTAS DE AUTENTICAÇÃO ---
+@app.errorhandler(500)
+def erro_interno(error):
+    return render_template('errors/500.html'), 500
+
+@app.errorhandler(403)
+def acesso_negado(error):
+    return render_template('errors/403.html'), 403
+
+@app.errorhandler(400)
+def requisicao_ruim(error):
+    return render_template('errors/400.html'), 400
+
+@app.errorhandler(Exception)
+def handle_general_error(error):
+    print(f"Erro não tratado: {str(error)}")
+    return render_template('errors/500.html'), 500
+
+# ==============================================================================
+# 7. ROTAS DE AUTENTICAÇÃO MELHORADAS
+# ==============================================================================
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    """Rota de login com validações melhoradas"""
     if current_user.is_authenticated:
-        return redirect(url_for('index'))
+        flash('Você já está logado!', 'info')
+        return redirect(url_for('dashboard'))
 
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        usuario = db.get_user_by_username(username)
+        try:
+            username = sanitizar_input(request.form.get('username', ''))
+            password = request.form.get('password', '')
 
-        if usuario and check_password_hash(usuario.password_hash, password):
-            login_user(usuario)
-            return redirect(url_for('index'))
-        else:
-            flash('Usuário ou senha inválidos.', 'error')
+            if not username or not password:
+                flash('Por favor, preencha todos os campos.', 'danger')
+                return render_template('login.html')
+
+            usuario = db.get_user_by_username(username)
+
+            if usuario and usuario.verify_password(password):
+                login_user(usuario)
+                
+                # Registrar dados na sessão
+                session['usuario_id'] = usuario.id
+                session['usuario_nome'] = usuario.username
+                
+                flash(f'Bem-vindo, {usuario.username}!', 'success')
+                
+                next_page = request.args.get('next')
+                return redirect(next_page or url_for('dashboard'))
+            else:
+                flash('Usuário ou senha inválidos.', 'danger')
+
+        except Exception as e:
+            flash('Erro durante o login. Tente novamente.', 'danger')
 
     return render_template('login.html')
 
 @app.route('/logout')
 @login_required
 def logout():
+    """Rota de logout"""
+    username = current_user.username
     logout_user()
-    flash('Você saiu do sistema.', 'info')
+    session.clear()
+    flash(f'Até logo, {username}! Você saiu do sistema.', 'info')
     return redirect(url_for('login'))
 
-# --- ROTAS DE CADASTRO ---
 @app.route('/cadastro', methods=['GET', 'POST'])
 def cadastro():
+    """Rota de cadastro com validações robustas"""
     if current_user.is_authenticated:
-        return redirect(url_for('index'))
+        return redirect(url_for('dashboard'))
             
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-            
-        # Verifica se o usuário já existe
-        if db.get_user_by_username(username):
-            flash('Este nome de usuário já existe. Por favor, escolha outro.', 'error')
-            return redirect(url_for('cadastro'))
+        try:
+            username = sanitizar_input(request.form.get('username', ''))
+            password = request.form.get('password', '')
+            confirm_password = request.form.get('confirm_password', '')
 
-        # Adiciona o novo usuário
-        db.add_user(username, password)
-        flash('Usuário criado com sucesso! Por favor, faça login.', 'success')
-        return redirect(url_for('login'))
+            # Validações
+            if not username or not password or not confirm_password:
+                flash('Por favor, preencha todos os campos.', 'danger')
+                return render_template('cadastro.html')
+
+            if len(username) < 3:
+                flash('Nome de usuário deve ter pelo menos 3 caracteres.', 'danger')
+                return render_template('cadastro.html')
+
+            if password != confirm_password:
+                flash('As senhas não coincidem.', 'danger')
+                return render_template('cadastro.html')
+
+            senha_valida, msg_erro = validar_senha(password)
+            if not senha_valida:
+                flash(msg_erro, 'danger')
+                return render_template('cadastro.html')
+
+            # Tentar criar usuário
+            sucesso, mensagem = db.add_user(username, password)
+            
+            if sucesso:
+                flash('Usuário criado com sucesso! Por favor, faça login.', 'success')
+                return redirect(url_for('login'))
+            else:
+                flash(mensagem, 'danger')
+
+        except Exception as e:
+            flash('Erro durante o cadastro. Tente novamente.', 'danger')
 
     return render_template('cadastro.html')
 
-# --- ROTA PRINCIPAL / ÍNDICE ---
+# ==============================================================================
+# 8. ROTAS PRINCIPAIS MELHORADAS
+# ==============================================================================
 @app.route('/')
-@login_required
 def index():
-    return redirect(url_for('produtos'))
+    """Página inicial redireciona para login ou dashboard"""
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('login'))
 
-# --- ROTAS DE PRODUTOS (CRUD) ---
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    """Dashboard administrativo com estatísticas"""
+    try:
+        estatisticas = db.get_estatisticas_gerais()
+        produtos_recentes = db.listar_produtos()[:5]  # Últimos 5 produtos
+        
+        return render_template('dashboard.html', 
+                             estatisticas=estatisticas,
+                             produtos_recentes=produtos_recentes)
+    except Exception as e:
+        flash('Erro ao carregar dashboard.', 'danger')
+        return redirect(url_for('produtos'))
+
+# ==============================================================================
+# 9. ROTAS DE PRODUTOS MELHORADAS (CRUD)
+# ==============================================================================
 @app.route('/produtos')
 @login_required
 def produtos():
-    lista_produtos = db.listar_produtos()
-    return render_template('produtos.html', produtos=lista_produtos)
+    """Lista de produtos com tratamento de erro"""
+    try:
+        lista_produtos = db.listar_produtos()
+        return render_template('produtos.html', produtos=lista_produtos)
+    except Exception as e:
+        flash('Erro ao carregar produtos.', 'danger')
+        return render_template('produtos.html', produtos=[])
 
 @app.route('/produtos/adicionar', methods=['GET', 'POST'])
 @login_required
 def adicionar_produto():
+    """Adicionar produto com validações"""
     if request.method == 'POST':
-        db.adicionar_produto(request.form['nome'], float(request.form['preco']), int(request.form['quantidade']), request.form.get('codigo_barras'))
-        flash('Produto adicionado com sucesso!', 'success')
-        return redirect(url_for('produtos'))
+        try:
+            nome = sanitizar_input(request.form.get('nome', ''))
+            preco = request.form.get('preco', '')
+            quantidade = request.form.get('quantidade', '')
+            codigo_barras = sanitizar_input(request.form.get('codigo_barras', ''))
+
+            # Validações
+            if not nome or len(nome) < 2:
+                flash('Nome do produto deve ter pelo menos 2 caracteres.', 'danger')
+                return render_template('produto_formulario.html', titulo="Adicionar Produto", produto=None)
+
+            try:
+                preco_float = float(preco)
+                if preco_float <= 0:
+                    flash('Preço deve ser maior que zero.', 'danger')
+                    return render_template('produto_formulario.html', titulo="Adicionar Produto", produto=None)
+            except (ValueError, TypeError):
+                flash('Preço inválido.', 'danger')
+                return render_template('produto_formulario.html', titulo="Adicionar Produto", produto=None)
+
+            try:
+                quantidade_int = int(quantidade)
+                if quantidade_int < 0:
+                    flash('Quantidade não pode ser negativa.', 'danger')
+                    return render_template('produto_formulario.html', titulo="Adicionar Produto", produto=None)
+            except (ValueError, TypeError):
+                flash('Quantidade inválida.', 'danger')
+                return render_template('produto_formulario.html', titulo="Adicionar Produto", produto=None)
+
+            # Adicionar produto
+            sucesso, mensagem = db.adicionar_produto(nome, preco_float, quantidade_int, codigo_barras)
+            
+            if sucesso:
+                flash('Produto adicionado com sucesso!', 'success')
+                return redirect(url_for('produtos'))
+            else:
+                flash(mensagem, 'danger')
+
+        except Exception as e:
+            flash('Erro ao adicionar produto. Tente novamente.', 'danger')
+
     return render_template('produto_formulario.html', titulo="Adicionar Produto", produto=None)
 
 @app.route('/produtos/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_produto(id):
-    if request.method == 'POST':
-        db.atualizar_produto(id, request.form['nome'], float(request.form['preco']), int(request.form['quantidade']), request.form.get('codigo_barras'))
-        flash('Produto atualizado com sucesso!', 'success')
-        return redirect(url_for('produtos'))
+    """Editar produto existente"""
     produto_existente = db.buscar_produto_por_id(id)
+    
+    if not produto_existente:
+        flash('Produto não encontrado.', 'danger')
+        return redirect(url_for('produtos'))
+
+    if request.method == 'POST':
+        try:
+            nome = sanitizar_input(request.form.get('nome', ''))
+            preco = request.form.get('preco', '')
+            quantidade = request.form.get('quantidade', '')
+            codigo_barras = sanitizar_input(request.form.get('codigo_barras', ''))
+
+            # Validações (iguais à adição)
+            if not nome or len(nome) < 2:
+                flash('Nome do produto deve ter pelo menos 2 caracteres.', 'danger')
+                return render_template('produto_formulario.html', titulo="Editar Produto", produto=produto_existente)
+
+            try:
+                preco_float = float(preco)
+                if preco_float <= 0:
+                    flash('Preço deve ser maior que zero.', 'danger')
+                    return render_template('produto_formulario.html', titulo="Editar Produto", produto=produto_existente)
+            except (ValueError, TypeError):
+                flash('Preço inválido.', 'danger')
+                return render_template('produto_formulario.html', titulo="Editar Produto", produto=produto_existente)
+
+            try:
+                quantidade_int = int(quantidade)
+                if quantidade_int < 0:
+                    flash('Quantidade não pode ser negativa.', 'danger')
+                    return render_template('produto_formulario.html', titulo="Editar Produto", produto=produto_existente)
+            except (ValueError, TypeError):
+                flash('Quantidade inválida.', 'danger')
+                return render_template('produto_formulario.html', titulo="Editar Produto", produto=produto_existente)
+
+            # Atualizar produto
+            sucesso, mensagem = db.atualizar_produto(id, nome, preco_float, quantidade_int, codigo_barras)
+            
+            if sucesso:
+                flash('Produto atualizado com sucesso!', 'success')
+                return redirect(url_for('produtos'))
+            else:
+                flash(mensagem, 'danger')
+
+        except Exception as e:
+            flash('Erro ao atualizar produto. Tente novamente.', 'danger')
+
     return render_template('produto_formulario.html', titulo="Editar Produto", produto=produto_existente)
 
 @app.route('/produtos/excluir/<int:id>', methods=['POST'])
 @login_required
 def excluir_produto(id):
-    db.excluir_produto(id)
-    flash('Produto excluído com sucesso!', 'success')
+    """Excluir produto com confirmação"""
+    try:
+        sucesso, mensagem = db.excluir_produto(id)
+        
+        if sucesso:
+            flash('Produto excluído com sucesso!', 'success')
+        else:
+            flash(mensagem, 'danger')
+            
+    except Exception as e:
+        flash('Erro ao excluir produto.', 'danger')
+    
     return redirect(url_for('produtos'))
 
-# --- ROTAS DE CLIENTES (CRUD) ---
+# ==============================================================================
+# 10. ROTAS DE CLIENTES MELHORADAS (CRUD)
+# ==============================================================================
 @app.route('/clientes')
 @login_required
 def clientes():
-    lista_clientes = db.listar_clientes()
-    return render_template('clientes.html', clientes=lista_clientes)
+    """Lista de clientes"""
+    try:
+        lista_clientes = db.listar_clientes()
+        return render_template('clientes.html', clientes=lista_clientes)
+    except Exception as e:
+        flash('Erro ao carregar clientes.', 'danger')
+        return render_template('clientes.html', clientes=[])
 
 @app.route('/clientes/adicionar', methods=['GET', 'POST'])
 @login_required
 def adicionar_cliente():
+    """Adicionar cliente com validações"""
     if request.method == 'POST':
-        db.adicionar_cliente(request.form['nome'], request.form['telefone'], request.form.get('email'))
-        flash('Cliente adicionado com sucesso!', 'success')
-        return redirect(url_for('clientes'))
+        try:
+            nome = sanitizar_input(request.form.get('nome', ''))
+            telefone = sanitizar_input(request.form.get('telefone', ''))
+            email = sanitizar_input(request.form.get('email', ''))
+
+            # Validações
+            if not nome or len(nome) < 2:
+                flash('Nome do cliente deve ter pelo menos 2 caracteres.', 'danger')
+                return render_template('cliente_formulario.html', titulo="Adicionar Cliente", cliente=None)
+
+            if email and not validar_email(email):
+                flash('Email inválido.', 'danger')
+                return render_template('cliente_formulario.html', titulo="Adicionar Cliente", cliente=None)
+
+            sucesso, mensagem = db.adicionar_cliente(nome, telefone, email)
+            
+            if sucesso:
+                flash('Cliente adicionado com sucesso!', 'success')
+                return redirect(url_for('clientes'))
+            else:
+                flash(mensagem, 'danger')
+
+        except Exception as e:
+            flash('Erro ao adicionar cliente. Tente novamente.', 'danger')
+
     return render_template('cliente_formulario.html', titulo="Adicionar Cliente", cliente=None)
 
 @app.route('/clientes/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_cliente(id):
-    if request.method == 'POST':
-        db.atualizar_cliente(id, request.form['nome'], request.form['telefone'], request.form.get('email'))
-        flash('Cliente atualizado com sucesso!', 'success')
-        return redirect(url_for('clientes'))
+    """Editar cliente existente"""
     cliente_existente = db.buscar_cliente_por_id(id)
+    
+    if not cliente_existente:
+        flash('Cliente não encontrado.', 'danger')
+        return redirect(url_for('clientes'))
+
+    if request.method == 'POST':
+        try:
+            nome = sanitizar_input(request.form.get('nome', ''))
+            telefone = sanitizar_input(request.form.get('telefone', ''))
+            email = sanitizar_input(request.form.get('email', ''))
+
+            # Validações
+            if not nome or len(nome) < 2:
+                flash('Nome do cliente deve ter pelo menos 2 caracteres.', 'danger')
+                return render_template('cliente_formulario.html', titulo="Editar Cliente", cliente=cliente_existente)
+
+            if email and not validar_email(email):
+                flash('Email inválido.', 'danger')
+                return render_template('cliente_formulario.html', titulo="Editar Cliente", cliente=cliente_existente)
+
+            sucesso, mensagem = db.atualizar_cliente(id, nome, telefone, email)
+            
+            if sucesso:
+                flash('Cliente atualizado com sucesso!', 'success')
+                return redirect(url_for('clientes'))
+            else:
+                flash(mensagem, 'danger')
+
+        except Exception as e:
+            flash('Erro ao atualizar cliente. Tente novamente.', 'danger')
+
     return render_template('cliente_formulario.html', titulo="Editar Cliente", cliente=cliente_existente)
 
 @app.route('/clientes/excluir/<int:id>', methods=['POST'])
 @login_required
 def excluir_cliente(id):
-    db.excluir_cliente(id)
-    flash('Cliente excluído com sucesso!', 'success')
+    """Excluir cliente"""
+    try:
+        sucesso, mensagem = db.excluir_cliente(id)
+        
+        if sucesso:
+            flash('Cliente excluído com sucesso!', 'success')
+        else:
+            flash(mensagem, 'danger')
+            
+    except Exception as e:
+        flash('Erro ao excluir cliente.', 'danger')
+    
     return redirect(url_for('clientes'))
 
-# --- ROTAS DE VENDAS E CAIXA (PDV) ---
+# ==============================================================================
+# 11. ROTAS DE VENDAS E CAIXA MELHORADAS
+# ==============================================================================
 @app.route('/vendas')
 @login_required
 def vendas():
-    vendas_historico = db.get_relatorio_vendas_detalhado()
-    return render_template('vendas.html', vendas=vendas_historico)
+    """Histórico de vendas"""
+    try:
+        vendas_historico = db.get_relatorio_vendas_detalhado()
+        return render_template('vendas.html', vendas=vendas_historico)
+    except Exception as e:
+        flash('Erro ao carregar histórico de vendas.', 'danger')
+        return render_template('vendas.html', vendas=[])
 
 @app.route('/caixa')
 @login_required
 def caixa():
-    produtos_disponiveis = db.listar_produtos()
-    clientes_cadastrados = db.listar_clientes()
-    return render_template('caixa.html', produtos=produtos_disponiveis, clientes=clientes_cadastrados)
+    """PDV - Ponto de Venda"""
+    try:
+        produtos_disponiveis = db.listar_produtos()
+        clientes_cadastrados = db.listar_clientes()
+        return render_template('caixa.html', produtos=produtos_disponiveis, clientes=clientes_cadastrados)
+    except Exception as e:
+        flash('Erro ao carregar caixa.', 'danger')
+        return render_template('caixa.html', produtos=[], clientes=[])
 
-@app.route('/vendas/nova', methods=['GET', 'POST'])
-@login_required
-def nova_venda():
-    if request.method == 'POST':
-        cliente_id = request.form.get('cliente_id')
-        produto_id = request.form.get('produto_id')
-        quantidade = int(request.form.get('quantidade', 0))
-
-        if not produto_id or quantidade <= 0:
-            flash('Selecione um produto e uma quantidade válida.', 'error')
-            return redirect(url_for('nova_venda'))
-
-        produto = db.buscar_produto_por_id(produto_id)
-        if quantidade > produto['quantidade']:
-             flash(f'Estoque insuficiente para {produto["nome"]}.', 'error')
-             return redirect(url_for('nova_venda'))
-             
-        total = produto['preco'] * quantidade
-        carrinho = [{'id': produto_id, 'qtd': quantidade}]
-        
-        # Aqui usamos a função de registrar venda simples
-        db.registrar_venda_completa(cliente_id, carrinho, total, 'N/A', 0, 0)
-        flash('Venda registrada com sucesso!', 'success')
-        return redirect(url_for('vendas'))
-        
-    # Para o GET, carregamos produtos e clientes para preencher os <select> no form
-    produtos_disponiveis = db.listar_produtos()
-    clientes_cadastrados = db.listar_clientes()
-    return render_template('venda_formulario.html', produtos=produtos_disponiveis, clientes=clientes_cadastrados)
-
-# --- ROTAS DE API (PARA JAVASCRIPT) ---
 @app.route('/api/buscar_produto/<code>')
 @login_required
 def api_buscar_produto(code):
-    produto = db.buscar_produto_por_codigo(code)
-    if produto:
-        return jsonify(dict(produto))
-    else:
-        return jsonify({'erro': 'Produto não encontrado'}), 404
+    """API para buscar produto por código"""
+    try:
+        code = sanitizar_input(code)
+        produto = db.buscar_produto_por_codigo(code)
+        if produto:
+            return jsonify(dict(produto))
+        else:
+            return jsonify({'erro': 'Produto não encontrado'}), 404
+    except Exception as e:
+        return jsonify({'erro': 'Erro interno do servidor'}), 500
 
 @app.route('/caixa/finalizar', methods=['POST'])
 @login_required
 def finalizar_venda():
+    """Finalizar venda via AJAX"""
     try:
         dados = request.get_json()
+        
         if not dados or 'itens' not in dados or not dados['itens']:
             return jsonify({'erro': 'Dados da venda inválidos ou carrinho vazio.'}), 400
         
-        itens_carrinho = dados.get('itens')
+        itens_carrinho = dados.get('itens', [])
         total_recalculado = 0
         
+        # Validar cada item do carrinho
         for item in itens_carrinho:
             produto = db.buscar_produto_por_id(item['id'])
-            if not produto: return jsonify({'erro': f'Produto com ID {item["id"]} não encontrado.'}), 400
-            if item['qtd'] > produto['quantidade']: return jsonify({'erro': f'Estoque insuficiente para o produto {produto["nome"]}.'}), 400
-            total_recalculado += produto['preco'] * item['qtd']
+            if not produto:
+                return jsonify({'erro': f'Produto com ID {item["id"]} não encontrado.'}), 400
             
-        db.registrar_venda_completa(
-            cliente_id=dados.get('cliente_id'), itens_carrinho=itens_carrinho, total=total_recalculado,
-            forma_pagamento=dados.get('forma_pagamento', 'N/A'), valor_pago=dados.get('valor_pago', total_recalculado),
+            if item['qtd'] > produto['quantidade']:
+                return jsonify({'erro': f'Estoque insuficiente para {produto["nome"]}.'}), 400
+            
+            total_recalculado += produto['preco'] * item['qtd']
+        
+        # Registrar venda
+        venda_id, mensagem = db.registrar_venda_completa(
+            cliente_id=dados.get('cliente_id'),
+            itens_carrinho=itens_carrinho,
+            total=total_recalculado,
+            forma_pagamento=dados.get('forma_pagamento', 'Dinheiro'),
+            valor_pago=dados.get('valor_pago', total_recalculado),
             troco=dados.get('troco', 0)
         )
-        return jsonify({'mensagem': 'Venda finalizada com sucesso!'})
+        
+        if venda_id:
+            return jsonify({
+                'mensagem': 'Venda finalizada com sucesso!',
+                'venda_id': venda_id
+            })
+        else:
+            return jsonify({'erro': mensagem}), 400
+            
     except Exception as e:
         print(f"Erro ao finalizar venda: {e}")
         return jsonify({'erro': 'Ocorreu um erro interno no servidor.'}), 500
 
-# --- ROTAS DE RELATÓRIOS ---
+# ==============================================================================
+# 12. ROTAS DE RELATÓRIOS
+# ==============================================================================
 @app.route('/relatorios')
 @login_required
 def relatorios():
-    relatorio_estoque = db.get_relatorio_estoque()
-    relatorio_movimentacao = db.get_relatorio_movimentacao_estoque()
-    return render_template('relatorios.html', estoque=relatorio_estoque, movimentacoes=relatorio_movimentacao)
+    """Página de relatórios"""
+    try:
+        relatorio_estoque = db.get_relatorio_estoque()
+        relatorio_movimentacao = db.get_relatorio_movimentacao_estoque()
+        estatisticas = db.get_estatisticas_gerais()
+        
+        return render_template('relatorios.html', 
+                             estoque=relatorio_estoque, 
+                             movimentacoes=relatorio_movimentacao,
+                             estatisticas=estatisticas)
+    except Exception as e:
+        flash('Erro ao carregar relatórios.', 'danger')
+        return render_template('relatorios.html', estoque=[], movimentacoes=[], estatisticas={})
 
 # ==============================================================================
-# 6. BLOCO DE EXECUÇÃO
+# 13. BLOCO DE EXECUÇÃO MELHORADO
 # ==============================================================================
 if __name__ == '__main__':
-    db.setup_database()  # Garante que todas as tabelas, incluindo 'usuarios', sejam criadas
-    app.run(debug=True)
+    # Configuração inicial do banco
+    if db.setup_database():
+        print("✅ Banco de dados configurado com sucesso!")
+    else:
+        print("❌ Erro ao configurar banco de dados!")
+    
+    # Executar aplicação
+    debug_mode = os.environ.get('DEBUG', 'False').lower() == 'true'
+    host = os.environ.get('HOST', '127.0.0.1')
+    port = int(os.environ.get('PORT', 5000))
+    
+    app.run(host=host, port=port, debug=debug_mode)

@@ -1,34 +1,369 @@
 {% extends "base.html" %}
-{% block title %}Histórico de Vendas{% endblock %}
+
 {% block content %}
-<div class="header-container">
-    <h2>Histórico de Vendas</h2>
-    <a href="{{ url_for('nova_venda') }}" class="btn btn-primary">Registrar Nova Venda</a>
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1><i class="fas fa-receipt me-2"></i>Histórico de Vendas</h1>
+                <div>
+                    <a href="{{ url_for('caixa') }}" class="btn btn-primary me-2">
+                        <i class="fas fa-cash-register me-2"></i>Ir para Caixa
+                    </a>
+                    <button class="btn btn-outline-primary" id="btn-exportar">
+                        <i class="fas fa-download me-2"></i>Exportar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros e Estatísticas -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label for="data-inicio" class="form-label">Data Início</label>
+                            <input type="date" class="form-control" id="data-inicio">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="data-fim" class="form-label">Data Fim</label>
+                            <input type="date" class="form-control" id="data-fim">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="filtro-cliente" class="form-label">Cliente</label>
+                            <select class="form-select" id="filtro-cliente">
+                                <option value="">Todos os clientes</option>
+                                {% for cliente in clientes %}
+                                <option value="{{ cliente.id }}">{{ cliente.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-12">
+                            <button class="btn btn-primary me-2" id="btn-filtrar">
+                                <i class="fas fa-filter me-2"></i>Filtrar
+                            </button>
+                            <button class="btn btn-outline-secondary" id="btn-limpar-filtros">
+                                <i class="fas fa-times me-2"></i>Limpar Filtros
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="row">
+                <div class="col-6">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body text-center py-3">
+                            <i class="fas fa-receipt fa-2x mb-2"></i>
+                            <h5>{{ vendas|length }}</h5>
+                            <small>Total de Vendas</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center py-3">
+                            <i class="fas fa-dollar-sign fa-2x mb-2"></i>
+                            <h5>R$ {{ "%.2f"|format(vendas|sum(attribute='total')) }}</h5>
+                            <small>Valor Total</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela de Vendas -->
+    <div class="card">
+        <div class="card-body">
+            {% if vendas %}
+            <div class="table-responsive">
+                <table class="table table-hover" id="tabela-vendas">
+                    <thead class="table-light">
+                        <tr>
+                            <th width="10%">ID Venda</th>
+                            <th width="15%">Data/Hora</th>
+                            <th width="20%">Cliente</th>
+                            <th width="35%">Produtos</th>
+                            <th width="10%">Total</th>
+                            <th width="10%">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for venda in vendas %}
+                        <tr>
+                            <td>
+                                <span class="badge bg-secondary">#{{ venda.id }}</span>
+                            </td>
+                            <td>
+                                <div class="d-flex flex-column">
+                                    <small class="text-muted">{{ venda.data_venda.split(' ')[0] }}</small>
+                                    <small>{{ venda.data_venda.split(' ')[1] }}</small>
+                                </div>
+                            </td>
+                            <td>
+                                {% if venda.cliente_nome and venda.cliente_nome != 'N/A' %}
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-user text-muted me-2"></i>
+                                    <span>{{ venda.cliente_nome }}</span>
+                                </div>
+                                {% else %}
+                                <span class="text-muted">Cliente não informado</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="produtos-lista">
+                                    {% set produtos_lista = venda.produtos.split('; ') %}
+                                    {% for produto in produtos_lista %}
+                                    <span class="badge bg-light text-dark me-1 mb-1">{{ produto }}</span>
+                                    {% endfor %}
+                                </div>
+                            </td>
+                            <td>
+                                <span class="fw-bold text-success">R$ {{ "%.2f"|format(venda.total) }}</span>
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-outline-primary" 
+                                            data-bs-toggle="tooltip" 
+                                            title="Ver detalhes"
+                                            onclick="verDetalhesVenda({{ venda.id }})">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            data-bs-toggle="tooltip"
+                                            title="Imprimir recibo"
+                                            onclick="imprimirRecibo({{ venda.id }})">
+                                        <i class="fas fa-print"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Paginação -->
+            <nav aria-label="Navegação de vendas" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item disabled">
+                        <a class="page-link" href="#" tabindex="-1">
+                            <i class="fas fa-chevron-left"></i>
+                        </a>
+                    </li>
+                    <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                    <li class="page-item"><a class="page-link" href="#">2</a></li>
+                    <li class="page-item"><a class="page-link" href="#">3</a></li>
+                    <li class="page-item">
+                        <a class="page-link" href="#">
+                            <i class="fas fa-chevron-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-receipt fa-4x text-muted mb-3"></i>
+                <h4 class="text-muted">Nenhuma venda registrada</h4>
+                <p class="text-muted">Comece registrando sua primeira venda no caixa.</p>
+                <a href="{{ url_for('caixa') }}" class="btn btn-primary btn-lg">
+                    <i class="fas fa-cash-register me-2"></i>Ir para o Caixa
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
 </div>
-<table>
-    <thead>
+
+<!-- Modal de Detalhes da Venda -->
+<div class="modal fade" id="modalDetalhesVenda" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-receipt me-2"></i>Detalhes da Venda #<span id="venda-id"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>Data:</strong> <span id="venda-data"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Cliente:</strong> <span id="venda-cliente"></span>
+                    </div>
+                </div>
+                
+                <h6>Produtos Vendidos</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm" id="tabela-detalhes">
+                        <thead>
+                            <tr>
+                                <th>Produto</th>
+                                <th>Quantidade</th>
+                                <th>Preço Unit.</th>
+                                <th>Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Detalhes serão preenchidos via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <strong>Forma de Pagamento:</strong> <span id="venda-pagamento"></span>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <h5>Total: R$ <span id="venda-total" class="text-success"></span></h5>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-primary" onclick="imprimirReciboModal()">
+                    <i class="fas fa-print me-2"></i>Imprimir Recibo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Inicializar tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
+    // Configurar filtros de data para padrão (últimos 30 dias)
+    const hoje = new Date();
+    const trintaDiasAtras = new Date();
+    trintaDiasAtras.setDate(hoje.getDate() - 30);
+
+    document.getElementById('data-inicio').value = trintaDiasAtras.toISOString().split('T')[0];
+    document.getElementById('data-fim').value = hoje.toISOString().split('T')[0];
+
+    // Event listeners para filtros
+    document.getElementById('btn-filtrar').addEventListener('click', aplicarFiltros);
+    document.getElementById('btn-limpar-filtros').addEventListener('click', limparFiltros);
+    document.getElementById('btn-exportar').addEventListener('click', exportarVendas);
+});
+
+function aplicarFiltros() {
+    const dataInicio = document.getElementById('data-inicio').value;
+    const dataFim = document.getElementById('data-fim').value;
+    const clienteId = document.getElementById('filtro-cliente').value;
+
+    // Aqui você implementaria a lógica de filtro via AJAX
+    // Por enquanto, apenas mostra mensagem
+    mostrarNotificacao('Filtros aplicados com sucesso!', 'info');
+}
+
+function limparFiltros() {
+    document.getElementById('data-inicio').value = '';
+    document.getElementById('data-fim').value = '';
+    document.getElementById('filtro-cliente').value = '';
+    mostrarNotificacao('Filtros limpos!', 'info');
+}
+
+function verDetalhesVenda(vendaId) {
+    // Simulação de dados - na implementação real, faria uma requisição AJAX
+    const vendaSimulada = {
+        id: vendaId,
+        data: '2024-01-15 14:30:00',
+        cliente: 'Cliente Exemplo',
+        produtos: [
+            { nome: 'Arroz', quantidade: 2, preco: 25.00 },
+            { nome: 'Feijão', quantidade: 1, preco: 8.50 },
+            { nome: 'Óleo', quantidade: 1, preco: 7.00 }
+        ],
+        formaPagamento: 'Dinheiro',
+        total: 65.50
+    };
+
+    // Preencher modal
+    document.getElementById('venda-id').textContent = vendaId;
+    document.getElementById('venda-data').textContent = vendaSimulada.data;
+    document.getElementById('venda-cliente').textContent = vendaSimulada.cliente;
+    document.getElementById('venda-pagamento').textContent = vendaSimulada.formaPagamento;
+    document.getElementById('venda-total').textContent = vendaSimulada.total.toFixed(2);
+
+    // Preencher tabela de produtos
+    const tbody = document.querySelector('#tabela-detalhes tbody');
+    tbody.innerHTML = vendaSimulada.produtos.map(produto => `
         <tr>
-            <th>ID Venda</th>
-            <th>Data</th>
-            <th>Cliente</th>
-            <th>Produtos</th>
-            <th>Total</th>
+            <td>${produto.nome}</td>
+            <td>${produto.quantidade}</td>
+            <td>R$ ${produto.preco.toFixed(2)}</td>
+            <td>R$ ${(produto.quantidade * produto.preco).toFixed(2)}</td>
         </tr>
-    </thead>
-    <tbody>
-        {% for venda in vendas %}
-        <tr>
-            <td>{{ venda.id }}</td>
-            <td>{{ venda.data_venda }}</td>
-            <td>{{ venda.cliente_nome or 'N/A' }}</td>
-            <td>{{ venda.produtos }}</td>
-            <td>R$ {{ "%.2f"|format(venda.total) }}</td>
-        </tr>
-        {% else %}
-        <tr>
-            <td colspan="5">Nenhuma venda registrada.</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+    `).join('');
+
+    // Mostrar modal
+    new bootstrap.Modal(document.getElementById('modalDetalhesVenda')).show();
+}
+
+function imprimirRecibo(vendaId) {
+    // Implementar lógica de impressão
+    mostrarNotificacao(`Preparando recibo da venda #${vendaId}...`, 'info');
+}
+
+function imprimirReciboModal() {
+    const vendaId = document.getElementById('venda-id').textContent;
+    imprimirRecibo(vendaId);
+    bootstrap.Modal.getInstance(document.getElementById('modalDetalhesVenda')).hide();
+}
+
+function exportarVendas() {
+    // Implementar exportação para Excel/PDF
+    mostrarNotificacao('Exportando relatório de vendas...', 'info');
+}
+
+function mostrarNotificacao(mensagem, tipo) {
+    const alerta = document.createElement('div');
+    alerta.className = `alert alert-${type} alert-dismissible fade show`;
+    alerta.innerHTML = `
+        ${mensagem}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.querySelector('.container-fluid').prepend(alerta);
+    
+    setTimeout(() => alerta.remove(), 3000);
+}
+</script>
+
+<style>
+.produtos-lista {
+    max-height: 100px;
+    overflow-y: auto;
+}
+
+.badge {
+    font-size: 0.75em;
+}
+
+.table-responsive {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.modal-body {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+</style>
 {% endblock %}

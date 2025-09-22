@@ -1,37 +1,382 @@
 {% extends "base.html" %}
-{% block title %}Registrar Nova Venda{% endblock %}
+
 {% block content %}
-<h2>Registrar Nova Venda</h2>
-<form method="POST">
-    <div class="form-group">
-        <label for="cliente_id">Cliente (Opcional):</label>
-        <select id="cliente_id" name="cliente_id">
-            <option value="">-- Venda sem cadastro --</option>
-            {% for cliente in clientes %}
-            <option value="{{ cliente.id }}">{{ cliente.nome }}</option>
-            {% endfor %}
-        </select>
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1><i class="fas fa-cart-plus me-2"></i>Registrar Nova Venda Manual</h1>
+                <a href="{{ url_for('caixa') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-cash-register me-2"></i>Usar Caixa Rápido
+                </a>
+            </div>
+            <p class="text-muted">Registro manual de vendas - para uso quando o caixa rápido não estiver disponível</p>
+        </div>
     </div>
-    <hr>
-    <h4>Itens da Venda (Exemplo com 1 item)</h4>
-    <div class="form-group">
-        <label for="produto_id">Produto:</label>
-        <select id="produto_id" name="produto_id" required>
-            <option value="">-- Selecione um produto --</option>
-            {% for produto in produtos %}
-                {% if produto.quantidade > 0 %}
-                <option value="{{ produto.id }}">{{ produto.nome }} (Estoque: {{ produto.quantidade }})</option>
-                {% endif %}
-            {% endfor %}
-        </select>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="fas fa-shopping-cart me-2"></i>Itens da Venda</h4>
+                </div>
+                <div class="card-body">
+                    <form id="vendaForm" method="POST">
+                        <!-- Informações do Cliente -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="cliente_id" class="form-label">
+                                    <i class="fas fa-user me-1"></i>Cliente (Opcional)
+                                </label>
+                                <select class="form-select" id="cliente_id" name="cliente_id">
+                                    <option value="">-- Venda sem cadastro --</option>
+                                    {% for cliente in clientes %}
+                                    <option value="{{ cliente.id }}">{{ cliente.nome }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Selecione um cliente cadastrado ou deixe em branco para venda avulsa</div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Venda Rápida:</strong> Para vendas com múltiplos produtos, 
+                                    utilize o <a href="{{ url_for('caixa') }}">Caixa Rápido</a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <!-- Seleção de Produto -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="produto_id" class="form-label">
+                                    <i class="fas fa-box me-1"></i>Selecionar Produto
+                                </label>
+                                <select class="form-select" id="produto_id" name="produto_id" required>
+                                    <option value="">-- Selecione um produto --</option>
+                                    {% for produto in produtos %}
+                                        {% if produto.quantidade > 0 %}
+                                        <option value="{{ produto.id }}" 
+                                                data-preco="{{ produto.preco }}" 
+                                                data-estoque="{{ produto.quantidade }}"
+                                                data-nome="{{ produto.nome }}">
+                                            {{ produto.nome }} - R$ {{ "%.2f"|format(produto.preco) }} (Estoque: {{ produto.quantidade }})
+                                        </option>
+                                        {% else %}
+                                        <option value="{{ produto.id }}" disabled>
+                                            {{ produto.nome }} - ESGOTADO
+                                        </option>
+                                        {% endif %}
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="quantidade" class="form-label">
+                                    <i class="fas fa-hashtag me-1"></i>Quantidade
+                                </label>
+                                <input type="number" class="form-control" id="quantidade" name="quantidade" 
+                                       min="1" value="1" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">&nbsp;</label>
+                                <button type="button" class="btn btn-outline-primary w-100" id="btn-adicionar-item">
+                                    <i class="fas fa-plus me-2"></i>Adicionar Item
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Itens Adicionados -->
+                        <div class="mb-4" id="container-itens" style="display: none;">
+                            <h5><i class="fas fa-list me-2"></i>Itens da Venda</h5>
+                            <div class="table-responsive">
+                                <table class="table table-sm" id="tabela-itens">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Produto</th>
+                                            <th width="100">Quantidade</th>
+                                            <th width="120">Preço Unit.</th>
+                                            <th width="120">Subtotal</th>
+                                            <th width="80">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Itens serão adicionados dinamicamente -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Resumo da Venda -->
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <div class="alert alert-warning" id="alert-estoque" style="display: none;">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                    <span id="mensagem-estoque"></span>
+                                </div>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <h4 class="text-success">
+                                    Total: R$ <span id="total-venda">0.00</span>
+                                </h4>
+                                <input type="hidden" id="total_hidden" name="total">
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <!-- Forma de Pagamento -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="forma_pagamento" class="form-label">
+                                    <i class="fas fa-credit-card me-1"></i>Forma de Pagamento
+                                </label>
+                                <select class="form-select" id="forma_pagamento" name="forma_pagamento" required>
+                                    <option value="dinheiro">💵 Dinheiro</option>
+                                    <option value="cartao_debito">💳 Cartão de Débito</option>
+                                    <option value="cartao_credito">💳 Cartão de Crédito</option>
+                                    <option value="pix">📱 PIX</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <div id="campo-dinheiro">
+                                    <label for="valor_pago" class="form-label">Valor Entregue (R$)</label>
+                                    <input type="number" class="form-control" id="valor_pago" name="valor_pago" 
+                                           step="0.01" min="0" placeholder="0.00">
+                                    <div class="form-text" id="texto-troco">Troco: R$ 0.00</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Botões de Ação -->
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{{ url_for('vendas') }}" class="btn btn-outline-secondary me-md-2">
+                                <i class="fas fa-times me-2"></i>Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-success" id="btn-finalizar" disabled>
+                                <i class="fas fa-check-circle me-2"></i>Finalizar Venda
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Painel de Ajuda -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Como Registrar</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-light">
+                        <h6><i class="fas fa-1 me-2"></i>Selecione o Cliente</h6>
+                        <small class="text-muted">Opcional - para controle de histórico</small>
+                    </div>
+                    <div class="alert alert-light">
+                        <h6><i class="fas fa-2 me-2"></i>Escolha o Produto</h6>
+                        <small class="text-muted">Apenas produtos com estoque estão disponíveis</small>
+                    </div>
+                    <div class="alert alert-light">
+                        <h6><i class="fas fa-3 me-2"></i>Defina a Quantidade</h6>
+                        <small class="text-muted">Não pode exceder o estoque disponível</small>
+                    </div>
+                    <div class="alert alert-light">
+                        <h6><i class="fas fa-4 me-2"></i>Adicione ao Carrinho</h6>
+                        <small class="text-muted">Você pode adicionar apenas um produto por venda</small>
+                    </div>
+                    <div class="alert alert-light">
+                        <h6><i class="fas fa-5 me-2"></i>Finalize a Venda</h6>
+                        <small class="text-muted">O estoque será atualizado automaticamente</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Estatísticas Rápidas -->
+            <div class="card mt-4">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Estoque Disponível</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Total de Produtos:</span>
+                        <strong>{{ produtos|length }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Com Estoque:</span>
+                        <strong class="text-success">{{ produtos|selectattr('quantidade', 'gt', 0)|list|length }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Sem Estoque:</span>
+                        <strong class="text-danger">{{ produtos|selectattr('quantidade', 'le', 0)|list|length }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="form-group">
-        <label for="quantidade">Quantidade:</label>
-        <input type="number" id="quantidade" name="quantidade" min="1" required>
-    </div>
-    <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Finalizar Venda</button>
-        <a href="{{ url_for('vendas') }}" class="btn btn-secondary">Cancelar</a>
-    </div>
-</form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const produtoSelect = document.getElementById('produto_id');
+    const quantidadeInput = document.getElementById('quantidade');
+    const btnAdicionar = document.getElementById('btn-adicionar-item');
+    const containerItens = document.getElementById('container-itens');
+    const tabelaItens = document.getElementById('tabela-itens').querySelector('tbody');
+    const totalVendaSpan = document.getElementById('total-venda');
+    const totalHidden = document.getElementById('total_hidden');
+    const btnFinalizar = document.getElementById('btn-finalizar');
+    const alertEstoque = document.getElementById('alert-estoque');
+    const formaPagamentoSelect = document.getElementById('forma_pagamento');
+    const campoDinheiro = document.getElementById('campo-dinheiro');
+    const valorPagoInput = document.getElementById('valor_pago');
+    const textoTroco = document.getElementById('texto-troco');
+
+    let itensVenda = [];
+    let totalVenda = 0;
+
+    // Configurar evento do botão adicionar
+    btnAdicionar.addEventListener('click', adicionarItem);
+
+    // Configurar forma de pagamento
+    formaPagamentoSelect.addEventListener('change', function() {
+        if (this.value === 'dinheiro') {
+            campoDinheiro.style.display = 'block';
+        } else {
+            campoDinheiro.style.display = 'none';
+        }
+        validarFinalizacao();
+    });
+
+    // Configurar cálculo de troco
+    valorPagoInput.addEventListener('input', calcularTroco);
+
+    function adicionarItem() {
+        const produtoId = produtoSelect.value;
+        const produtoTexto = produtoSelect.options[produtoSelect.selectedIndex].text;
+        const preco = parseFloat(produtoSelect.selectedOptions[0].dataset.preco);
+        const estoque = parseInt(produtoSelect.selectedOptions[0].dataset.estoque);
+        const quantidade = parseInt(quantidadeInput.value);
+        const nomeProduto = produtoSelect.selectedOptions[0].dataset.nome;
+
+        if (!produtoId) {
+            mostrarNotificacao('Selecione um produto!', 'warning');
+            return;
+        }
+
+        if (quantidade <= 0) {
+            mostrarNotificacao('Quantidade deve ser maior que zero!', 'warning');
+            return;
+        }
+
+        if (quantidade > estoque) {
+            mostrarNotificacao(`Estoque insuficiente! Disponível: ${estoque}`, 'danger');
+            return;
+        }
+
+        // Verificar se produto já foi adicionado (limitar a 1 item por venda manual)
+        if (itensVenda.length > 0) {
+            mostrarNotificacao('Venda manual permite apenas um item por vez. Use o Caixa Rápido para múltiplos itens.', 'info');
+            return;
+        }
+
+        const subtotal = preco * quantidade;
+
+        // Adicionar à lista
+        itensVenda.push({
+            id: produtoId,
+            nome: nomeProduto,
+            preco: preco,
+            quantidade: quantidade,
+            subtotal: subtotal
+        });
+
+        // Atualizar UI
+        atualizarTabelaItens();
+        calcularTotal();
+        containerItens.style.display = 'block';
+        
+        // Limpar seleção
+        produtoSelect.value = '';
+        quantidadeInput.value = 1;
+
+        mostrarNotificacao(`${nomeProduto} adicionado à venda!`, 'success');
+    }
+
+    function atualizarTabelaItens() {
+        tabelaItens.innerHTML = itensVenda.map((item, index) => `
+            <tr>
+                <td>${item.nome}</td>
+                <td>${item.quantidade}</td>
+                <td>R$ ${item.preco.toFixed(2)}</td>
+                <td class="fw-bold">R$ ${item.subtotal.toFixed(2)}</td>
+                <td>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerItem(${index})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function calcularTotal() {
+        totalVenda = itensVenda.reduce((total, item) => total + item.subtotal, 0);
+        totalVendaSpan.textContent = totalVenda.toFixed(2);
+        totalHidden.value = totalVenda;
+        validarFinalizacao();
+        calcularTroco();
+    }
+
+    function calcularTroco() {
+        if (formaPagamentoSelect.value === 'dinheiro') {
+            const valorPago = parseFloat(valorPagoInput.value) || 0;
+            const troco = valorPago - totalVenda;
+            textoTroco.textContent = `Troco: R$ ${troco >= 0 ? troco.toFixed(2) : '0.00'}`;
+            
+            if (troco < 0) {
+                textoTroco.className = 'form-text text-danger';
+            } else {
+                textoTroco.className = 'form-text text-success';
+            }
+        }
+    }
+
+    function validarFinalizacao() {
+        const habilitar = itensVenda.length > 0 && totalVenda > 0;
+        
+        if (formaPagamentoSelect.value === 'dinheiro') {
+            const valorPago = parseFloat(valorPagoInput.value) || 0;
+            btnFinalizar.disabled = !habilitar || valorPago < totalVenda;
+        } else {
+            btnFinalizar.disabled = !habilitar;
+        }
+    }
+
+    window.removerItem = function(index) {
+        itensVenda.splice(index, 1);
+        atualizarTabelaItens();
+        calcularTotal();
+        
+        if (itensVenda.length === 0) {
+            containerItens.style.display = 'none';
+        }
+    }
+
+    function mostrarNotificacao(mensagem, tipo) {
+        const alerta = document.createElement('div');
+        alerta.className = `alert alert-${type} alert-dismissible fade show`;
+        alerta.innerHTML = `
+            ${mensagem}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.querySelector('.card-body').prepend(alerta);
+        
+        setTimeout(() => alerta.remove(), 4000);
+    }
+
+    // Inicializar
+    campoDinheiro.style.display = formaPagamentoSelect.value === 'dinheiro' ? 'block' : 'none';
+});
+</script>
 {% endblock %}

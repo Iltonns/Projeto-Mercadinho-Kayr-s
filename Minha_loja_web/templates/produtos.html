@@ -1,42 +1,130 @@
 {% extends "base.html" %}
 
-{% block title %}Gerenciar Produtos{% endblock %}
-
 {% block content %}
-<div class="header-container">
-    <h2>Lista de Produtos</h2>
-    <a href="{{ url_for('adicionar_produto') }}" class="btn btn-primary">Adicionar Novo Produto</a>
-</div>
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1><i class="fas fa-boxes me-2"></i>Gerenciar Produtos</h1>
+                <a href="{{ url_for('adicionar_produto') }}" class="btn btn-primary">
+                    <i class="fas fa-plus me-2"></i>Novo Produto
+                </a>
+            </div>
+        </div>
+    </div>
 
-<table>
-    <thead>
-        <tr>
-            <th>ID</th>
-            <th>Nome</th>
-            <th>Preço</th>
-            <th>Qtd. em Estoque</th>
-            <th>Ações</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for produto in produtos %}
-        <tr>
-            <td>{{ produto.id }}</td>
-            <td>{{ produto.nome }}</td>
-            <td>R$ {{ "%.2f"|format(produto.preco) }}</td>
-            <td>{{ produto.quantidade }}</td>
-            <td class="actions">
-                <a href="{{ url_for('editar_produto', id=produto.id) }}" class="btn btn-secondary">Editar</a>
-                <form action="{{ url_for('excluir_produto', id=produto.id) }}" method="POST" style="display:inline;">
-                    <button type="submit" class="btn btn-danger" onclick="return confirm('Tem certeza que deseja excluir este produto?');">Excluir</button>
-                </form>
-            </td>
-        </tr>
-        {% else %}
-        <tr>
-            <td colspan="5">Nenhum produto cadastrado.</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+    <!-- Search Bar -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="input-group">
+                <input type="text" class="form-control" placeholder="Buscar produtos...">
+                <button class="btn btn-outline-primary" type="button">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+        </div>
+        <div class="col-md-6 text-end">
+            <div class="btn-group">
+                <button class="btn btn-outline-primary active">Todos</button>
+                <button class="btn btn-outline-success">Em Estoque</button>
+                <button class="btn btn-outline-danger">Sem Estoque</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Products Table -->
+    <div class="card">
+        <div class="card-body">
+            {% if produtos %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nome</th>
+                            <th>Preço</th>
+                            <th>Estoque</th>
+                            <th>Status</th>
+                            <th>Código Barras</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for produto in produtos %}
+                        <tr>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-primary rounded-circle text-white p-2 me-3">
+                                        <i class="fas fa-box"></i>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-0">{{ produto.nome }}</h6>
+                                        <small class="text-muted">ID: {{ produto.id }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="fw-bold text-success">R$ {{ "%.2f"|format(produto.preco) }}</td>
+                            <td>
+                                <span class="fw-bold {% if produto.quantidade > 10 %}text-success{% elif produto.quantidade > 0 %}text-warning{% else %}text-danger{% endif %}">
+                                    {{ produto.quantidade }} un
+                                </span>
+                            </td>
+                            <td>
+                                {% if produto.quantidade > 10 %}
+                                <span class="badge bg-success">Disponível</span>
+                                {% elif produto.quantidade > 0 %}
+                                <span class="badge bg-warning">Últimas</span>
+                                {% else %}
+                                <span class="badge bg-danger">Esgotado</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small class="text-muted">{{ produto.codigo_barras or 'N/A' }}</small>
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                    <a href="{{ url_for('editar_produto', id=produto.id) }}" 
+                                       class="btn btn-sm btn-outline-primary"
+                                       data-bs-toggle="tooltip" title="Editar">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <form method="POST" action="{{ url_for('excluir_produto', id=produto.id) }}" 
+                                          class="d-inline" onsubmit="return confirm('Tem certeza que deseja excluir este produto?')">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                data-bs-toggle="tooltip" title="Excluir">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-box-open fa-4x text-muted mb-3"></i>
+                <h4 class="text-muted">Nenhum produto cadastrado</h4>
+                <p class="text-muted">Comece adicionando seu primeiro produto ao estoque.</p>
+                <a href="{{ url_for('adicionar_produto') }}" class="btn btn-primary btn-lg">
+                    <i class="fas fa-plus me-2"></i>Adicionar Primeiro Produto
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Ativar tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    })
+});
+</script>
 {% endblock %}

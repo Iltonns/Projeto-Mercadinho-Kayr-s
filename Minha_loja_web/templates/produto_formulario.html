@@ -1,29 +1,86 @@
 {% extends "base.html" %}
 
-{% block title %}{{ titulo }}{% endblock %}
-
 {% block content %}
-<h2>{{ titulo }}</h2>
-<form method="POST" action="{{ url_for('editar_produto', id=produto.id) if produto else url_for('adicionar_produto') }}">
-    <div class="form-group">
-        <label for="nome">Nome do Produto:</label>
-        <input type="text" id="nome" name="nome" value="{{ produto.nome if produto else '' }}" required>
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-lg">
+                <div class="card-header text-center">
+                    <h3 class="mb-0"><i class="fas fa-{{ 'plus' if not produto else 'edit' }} me-2"></i>{{ titulo }}</h3>
+                </div>
+                <div class="card-body p-4">
+                    <form method="POST">
+                        <!-- Nome -->
+                        <div class="mb-3">
+                            <label for="nome" class="form-label">Nome do Produto</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-tag"></i></span>
+                                <input type="text" class="form-control" id="nome" name="nome" 
+                                       value="{{ produto.nome if produto }}" 
+                                       placeholder="Ex: Arroz, Feijão, Óleo..." required>
+                            </div>
+                        </div>
+
+                        <!-- Preço -->
+                        <div class="mb-3">
+                            <label for="preco" class="form-label">Preço (R$)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">R$</span>
+                                <input type="number" class="form-control" id="preco" name="preco" 
+                                       value="{{ "%.2f"|format(produto.preco) if produto }}" 
+                                       step="0.01" min="0.01" placeholder="0.00" required>
+                            </div>
+                        </div>
+
+                        <!-- Quantidade -->
+                        <div class="mb-3">
+                            <label for="quantidade" class="form-label">Quantidade em Estoque</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-boxes"></i></span>
+                                <input type="number" class="form-control" id="quantidade" name="quantidade" 
+                                       value="{{ produto.quantidade if produto }}" 
+                                       min="0" placeholder="0" required>
+                            </div>
+                        </div>
+
+                        <!-- Código de Barras -->
+                        <div class="mb-4">
+                            <label for="codigo_barras" class="form-label">Código de Barras (Opcional)</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-barcode"></i></span>
+                                <input type="text" class="form-control" id="codigo_barras" name="codigo_barras" 
+                                       value="{{ produto.codigo_barras if produto }}" 
+                                       placeholder="Código de barras do produto">
+                            </div>
+                        </div>
+
+                        <!-- Buttons -->
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{{ url_for('produtos') }}" class="btn btn-outline-secondary me-md-2">
+                                <i class="fas fa-times me-2"></i>Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-save me-2"></i>{{ 'Salvar' if produto else 'Adicionar' }} Produto
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="form-group">
-        <label for="preco">Preço:</label>
-        <input type="number" step="0.01" id="preco" name="preco" value="{{ produto.preco if produto else '' }}" required>
-    </div>
-    <div class="form-group">
-        <label for="quantidade">Quantidade:</label>
-        <input type="number" id="quantidade" name="quantidade" value="{{ produto.quantidade if produto else '' }}" required>
-    </div>
-    <div class="form-group">
-        <label for="codigo_barras">Código de Barras (Opcional):</label>
-        <input type="text" id="codigo_barras" name="codigo_barras" value="{{ produto.codigo_barras if produto else '' }}">
-    </div>
-    <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Salvar</button>
-        <a href="{{ url_for('produtos') }}" class="btn btn-secondary">Cancelar</a>
-    </div>
-</form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-format price input
+    const precoInput = document.getElementById('preco');
+    if (precoInput) {
+        precoInput.addEventListener('blur', function() {
+            if (this.value) {
+                this.value = parseFloat(this.value).toFixed(2);
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

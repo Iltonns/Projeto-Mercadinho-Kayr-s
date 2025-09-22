@@ -1,23 +1,166 @@
 {% extends "base.html" %}
-{% block title %}{{ titulo }}{% endblock %}
+
 {% block content %}
-<h2>{{ titulo }}</h2>
-<form method="POST" action="{{ url_for('editar_cliente', id=cliente.id) if cliente else url_for('adicionar_cliente') }}">
-    <div class="form-group">
-        <label for="nome">Nome do Cliente:</label>
-        <input type="text" id="nome" name="nome" value="{{ cliente.nome if cliente else '' }}" required>
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-lg">
+                <div class="card-header text-center">
+                    <h3 class="mb-0"><i class="fas fa-{{ 'user-plus' if not cliente else 'user-edit' }} me-2"></i>{{ titulo }}</h3>
+                </div>
+                <div class="card-body p-4">
+                    <form id="clienteForm" method="POST">
+                        <!-- Nome -->
+                        <div class="mb-3">
+                            <label for="nome" class="form-label">Nome Completo</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-user"></i></span>
+                                <input type="text" class="form-control" id="nome" name="nome" 
+                                       value="{{ cliente.nome if cliente }}" 
+                                       placeholder="Digite o nome completo" required>
+                            </div>
+                            <div class="invalid-feedback" id="nomeError"></div>
+                        </div>
+
+                        <!-- Telefone -->
+                        <div class="mb-3">
+                            <label for="telefone" class="form-label">Telefone</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-phone"></i></span>
+                                <input type="tel" class="form-control" id="telefone" name="telefone" 
+                                       value="{{ cliente.telefone if cliente }}" 
+                                       placeholder="(11) 99999-9999">
+                            </div>
+                            <div class="form-text">Opcional</div>
+                        </div>
+
+                        <!-- Email -->
+                        <div class="mb-4">
+                            <label for="email" class="form-label">Email</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+                                <input type="email" class="form-control" id="email" name="email" 
+                                       value="{{ cliente.email if cliente }}" 
+                                       placeholder="cliente@email.com">
+                            </div>
+                            <div class="invalid-feedback" id="emailError"></div>
+                            <div class="form-text">Opcional</div>
+                        </div>
+
+                        <!-- Buttons -->
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{{ url_for('clientes') }}" class="btn btn-outline-secondary me-md-2">
+                                <i class="fas fa-times me-2"></i>Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-save me-2"></i>{{ 'Salvar' if cliente else 'Adicionar' }} Cliente
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="form-group">
-        <label for="telefone">Telefone:</label>
-        <input type="text" id="telefone" name="telefone" value="{{ cliente.telefone if cliente else '' }}" required>
-    </div>
-    <div class="form-group">
-        <label for="email">Email (Opcional):</label>
-        <input type="email" id="email" name="email" value="{{ cliente.email if cliente else '' }}">
-    </div>
-    <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Salvar</button>
-        <a href="{{ url_for('clientes') }}" class="btn btn-secondary">Cancelar</a>
-    </div>
-</form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('clienteForm');
+    const nomeInput = document.getElementById('nome');
+    const emailInput = document.getElementById('email');
+    const telefoneInput = document.getElementById('telefone');
+
+    // Máscara de telefone
+    if (telefoneInput) {
+        telefoneInput.addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, '');
+            if (value.length > 11) value = value.substring(0, 11);
+            
+            if (value.length > 10) {
+                value = value.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+            } else if (value.length > 6) {
+                value = value.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
+            } else if (value.length > 2) {
+                value = value.replace(/(\d{2})(\d{0,5})/, '($1) $2');
+            } else if (value.length > 0) {
+                value = value.replace(/(\d{0,2})/, '($1');
+            }
+            
+            e.target.value = value;
+        });
+    }
+
+    // Validações em tempo real
+    nomeInput.addEventListener('input', validateNome);
+    emailInput.addEventListener('input', validateEmail);
+
+    function validateNome() {
+        const nome = nomeInput.value.trim();
+        
+        if (!nome) {
+            showError(nomeInput, 'Nome é obrigatório');
+            return false;
+        }
+        
+        if (nome.length < 2) {
+            showError(nomeInput, 'Nome deve ter pelo menos 2 caracteres');
+            return false;
+        }
+        
+        showSuccess(nomeInput);
+        return true;
+    }
+
+    function validateEmail() {
+        const email = emailInput.value.trim();
+        
+        if (!email) {
+            // Email é opcional, então se estiver vazio é válido
+            showSuccess(emailInput);
+            return true;
+        }
+        
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            showError(emailInput, 'Por favor, insira um email válido');
+            return false;
+        }
+        
+        showSuccess(emailInput);
+        return true;
+    }
+
+    function showError(input, message) {
+        input.classList.add('is-invalid');
+        input.classList.remove('is-valid');
+        const errorElement = document.getElementById(input.id + 'Error');
+        if (errorElement) {
+            errorElement.textContent = message;
+        }
+    }
+
+    function showSuccess(input) {
+        input.classList.remove('is-invalid');
+        input.classList.add('is-valid');
+    }
+
+    // Form submission
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const isNomeValid = validateNome();
+        const isEmailValid = validateEmail();
+        
+        if (isNomeValid && isEmailValid) {
+            // Show loading state
+            const submitBtn = form.querySelector('button[type="submit"]');
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Salvando...';
+            submitBtn.disabled = true;
+            
+            // Submit form
+            form.submit();
+        }
+    });
+});
+</script>
 {% endblock %}

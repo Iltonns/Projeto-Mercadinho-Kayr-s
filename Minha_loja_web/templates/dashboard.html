@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Hero Section -->
+<div class="hero-section">
+    <div class="container text-center">
+        <h1 class="display-4 fw-bold">Bem-vindo, {{ current_user.username }}!</h1>
+        <p class="lead">Sistema de gestão completo do Mercadinho Kayrós</p>
+    </div>
+</div>
+
+<!-- Dashboard Content -->
+<div class="container">
+    <!-- Estatísticas -->
+    <div class="row mb-5">
+        <div class="col-md-3 mb-3">
+            <div class="stat-card bg-primary">
+                <i class="fas fa-boxes"></i>
+                <h3>{{ estatisticas.total_produtos or 0 }}</h3>
+                <p>Total de Produtos</p>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="stat-card bg-success">
+                <i class="fas fa-check-circle"></i>
+                <h3>{{ estatisticas.produtos_estoque or 0 }}</h3>
+                <p>Em Estoque</p>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="stat-card bg-warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                <h3>{{ estatisticas.produtos_sem_estoque or 0 }}</h3>
+                <p>Sem Estoque</p>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="stat-card bg-info">
+                <i class="fas fa-dollar-sign"></i>
+                <h3>R$ {{ "%.2f"|format(estatisticas.valor_estoque or 0) }}</h3>
+                <p>Valor em Estoque</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Ações Rápidas -->
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-bolt me-2"></i>Ações Rápidas</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('caixa') }}" class="btn btn-primary btn-lg">
+                            <i class="fas fa-cash-register me-2"></i>Abrir Caixa
+                        </a>
+                        <a href="{{ url_for('adicionar_produto') }}" class="btn btn-success">
+                            <i class="fas fa-plus me-2"></i>Novo Produto
+                        </a>
+                        <a href="{{ url_for('adicionar_cliente') }}" class="btn btn-info">
+                            <i class="fas fa-user-plus me-2"></i>Novo Cliente
+                        </a>
+                        <a href="{{ url_for('relatorios') }}" class="btn btn-warning">
+                            <i class="fas fa-chart-bar me-2"></i>Ver Relatórios
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Produtos Recentes -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Produtos Recentes</h5>
+                </div>
+                <div class="card-body">
+                    {% if produtos_recentes %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Produto</th>
+                                    <th>Preço</th>
+                                    <th>Estoque</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for produto in produtos_recentes %}
+                                <tr>
+                                    <td>{{ produto.nome }}</td>
+                                    <td class="fw-bold text-success">R$ {{ "%.2f"|format(produto.preco) }}</td>
+                                    <td>{{ produto.quantidade }}</td>
+                                    <td>
+                                        {% if produto.quantidade > 10 %}
+                                        <span class="badge bg-success">Disponível</span>
+                                        {% elif produto.quantidade > 0 %}
+                                        <span class="badge bg-warning">Últimas</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Esgotado</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">Nenhum produto cadastrado ainda.</p>
+                        <a href="{{ url_for('adicionar_produto') }}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Adicionar Primeiro Produto
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

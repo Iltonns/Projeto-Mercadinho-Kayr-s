@@ -1,57 +1,380 @@
 {% extends "base.html" %}
-{% block title %}Caixa - Ponto de Venda{% endblock %}
 
 {% block content %}
-<div class="caixa-container">
-    <div class="painel-venda">
-        <h2>Registro de Venda</h2>
-
-        <div class="form-group">
-            <label for="busca-produto">Buscar Produto (Nome ou Cód. Barras):</label>
-            <input type="text" id="busca-produto" placeholder="Digite o código e pressione Enter..." autofocus>
-        </div>
-
-        <h3>Carrinho</h3>
-        <table class="tabela-caixa">
-            <thead>
-                <tr>
-                    <th>Produto</th>
-                    <th>Qtd.</th>
-                    <th>Preço Unit.</th>
-                    <th>Subtotal</th>
-                    <th>Ação</th>
-                </tr>
-            </thead>
-            <tbody id="carrinho-itens">
-                </tbody>
-        </table>
-
-        <div class="total-container">
-            <strong>TOTAL: R$ <span id="valor-total">0.00</span></strong>
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1><i class="fas fa-cash-register me-2"></i>Ponto de Venda (PDV)</h1>
+                <div>
+                    <span class="badge bg-success fs-6 me-3">
+                        <i class="fas fa-user me-1"></i> Atendente: {{ current_user.username }}
+                    </span>
+                    <button id="btn-nova-venda" class="btn btn-outline-secondary">
+                        <i class="fas fa-receipt me-2"></i>Nova Venda
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div class="painel-pagamento">
-        <h2>Pagamento</h2>
-        <div class="form-group">
-            <label for="forma-pagamento">Forma de Pagamento:</label>
-            <select id="forma-pagamento" name="forma_pagamento">
-                <option value="dinheiro">Dinheiro</option>
-                <option value="cartao_debito">Cartão de Débito</option>
-                <option value="cartao_credito">Cartão de Crédito</option>
-                <option value="pix">Pix</option>
-            </select>
+    <div class="row">
+        <!-- Painel de Venda -->
+        <div class="col-lg-8 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="fas fa-shopping-cart me-2"></i>Registro de Venda</h4>
+                </div>
+                <div class="card-body">
+                    <!-- Busca de Produtos -->
+                    <div class="row mb-4">
+                        <div class="col-md-8">
+                            <label for="busca-produto" class="form-label">
+                                <i class="fas fa-search me-1"></i>Buscar Produto (Nome ou Código de Barras)
+                            </label>
+                            <div class="input-group">
+                                <input type="text" class="form-control form-control-lg" 
+                                       id="busca-produto" 
+                                       placeholder="Digite o nome ou código e pressione Enter..." 
+                                       autofocus>
+                                <button class="btn btn-outline-primary" type="button" id="btn-scan">
+                                    <i class="fas fa-barcode"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="cliente-venda" class="form-label">
+                                <i class="fas fa-user me-1"></i>Cliente (Opcional)
+                            </label>
+                            <select class="form-select" id="cliente-venda">
+                                <option value="">Selecionar Cliente</option>
+                                {% for cliente in clientes %}
+                                <option value="{{ cliente.id }}">{{ cliente.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Carrinho -->
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="40%">Produto</th>
+                                    <th width="15%">Preço Unit.</th>
+                                    <th width="15%">Quantidade</th>
+                                    <th width="15%">Subtotal</th>
+                                    <th width="15%">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="carrinho-itens">
+                                <tr id="carrinho-vazio">
+                                    <td colspan="5" class="text-center py-4">
+                                        <i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i>
+                                        <p class="text-muted">Carrinho vazio. Adicione produtos usando a busca acima.</p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Resumo do Carrinho -->
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Itens no carrinho:</strong> 
+                                <span id="total-itens">0</span> produto(s)
+                            </div>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <h3 class="text-success">
+                                TOTAL: R$ <span id="valor-total">0.00</span>
+                            </h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="form-group" id="campo-valor-pago">
-            <label for="valor-pago">Valor Entregue (R$):</label>
-            <input type="number" step="0.01" id="valor-pago" placeholder="0.00">
+
+        <!-- Painel de Pagamento -->
+        <div class="col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0"><i class="fas fa-credit-card me-2"></i>Finalização</h4>
+                </div>
+                <div class="card-body">
+                    <!-- Forma de Pagamento -->
+                    <div class="mb-4">
+                        <label for="forma-pagamento" class="form-label">
+                            <i class="fas fa-money-bill-wave me-1"></i>Forma de Pagamento
+                        </label>
+                        <select class="form-select" id="forma-pagamento">
+                            <option value="dinheiro">💵 Dinheiro</option>
+                            <option value="cartao_debito">💳 Cartão de Débito</option>
+                            <option value="cartao_credito">💳 Cartão de Crédito</option>
+                            <option value="pix">📱 PIX</option>
+                            <option value="transferencia">🏦 Transferência</option>
+                        </select>
+                    </div>
+
+                    <!-- Campos Dinâmicos de Pagamento -->
+                    <div id="campos-pagamento">
+                        <!-- Dinheiro -->
+                        <div class="pagamento-campo" id="campo-dinheiro">
+                            <div class="mb-3">
+                                <label for="valor-pago" class="form-label">Valor Entregue (R$)</label>
+                                <input type="number" class="form-control" id="valor-pago" 
+                                       step="0.01" min="0" placeholder="0.00">
+                            </div>
+                            <div class="alert alert-warning">
+                                <i class="fas fa-calculator me-2"></i>
+                                <strong>Troco:</strong> R$ <span id="valor-troco">0.00</span>
+                            </div>
+                        </div>
+
+                        <!-- Cartão/PIX/Transferência -->
+                        <div class="pagamento-campo d-none" id="campo-outros">
+                            <div class="alert alert-info">
+                                <i class="fas fa-check-circle me-2"></i>
+                                Valor a receber: R$ <span id="valor-a-receber">0.00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Botão Finalizar -->
+                    <div class="d-grid gap-2 mt-4">
+                        <button id="btn-finalizar-venda" class="btn btn-success btn-lg" disabled>
+                            <i class="fas fa-check-circle me-2"></i>Finalizar Venda
+                        </button>
+                        <button id="btn-cancelar-venda" class="btn btn-outline-danger">
+                            <i class="fas fa-times me-2"></i>Cancelar Venda
+                        </button>
+                    </div>
+
+                    <!-- Resumo Rápido -->
+                    <div class="mt-4 p-3 bg-light rounded">
+                        <h6><i class="fas fa-clock me-2"></i>Resumo da Venda</h6>
+                        <small class="text-muted">
+                            <div>Itens: <span id="resumo-itens">0</span></div>
+                            <div>Total: R$ <span id="resumo-total">0.00</span></div>
+                            <div>Pagamento: <span id="resumo-pagamento">-</span></div>
+                        </small>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="troco-container">
-            <strong>Troco: R$ <span id="valor-troco">0.00</span></strong>
-        </div>
-        <button id="btn-finalizar-venda" class="btn btn-primary btn-grande">Finalizar Venda</button>
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='caixa.js') }}"></script>
+<!-- Modal de Confirmação -->
+<div class="modal fade" id="modalConfirmacao" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-check-circle me-2"></i>Venda Finalizada!</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <i class="fas fa-receipt fa-4x text-success mb-3"></i>
+                <h4>Venda registrada com sucesso!</h4>
+                <p class="mb-0">Número da venda: <strong id="numero-venda">#0000</strong></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-primary" id="btn-imprimir-recibo">
+                    <i class="fas fa-print me-2"></i>Imprimir Recibo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Variáveis globais
+let carrinho = [];
+let totalVenda = 0;
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', function() {
+    inicializarCaixa();
+});
+
+function inicializarCaixa() {
+    // Configurar busca de produtos
+    const buscaInput = document.getElementById('busca-produto');
+    buscaInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            buscarEAdicionarProduto(this.value);
+            this.value = '';
+        }
+    });
+
+    // Configurar forma de pagamento
+    const formaPagamento = document.getElementById('forma-pagamento');
+    formaPagamento.addEventListener('change', atualizarCamposPagamento);
+
+    // Configurar valor pago
+    const valorPago = document.getElementById('valor-pago');
+    valorPago.addEventListener('input', calcularTroco);
+
+    // Botões
+    document.getElementById('btn-finalizar-venda').addEventListener('click', finalizarVenda);
+    document.getElementById('btn-cancelar-venda').addEventListener('click', cancelarVenda);
+    document.getElementById('btn-nova-venda').addEventListener('click', novaVenda);
+
+    // Inicializar campos de pagamento
+    atualizarCamposPagamento();
+}
+
+function buscarEAdicionarProduto(termo) {
+    if (!termo.trim()) return;
+
+    fetch(`/api/buscar_produto/${encodeURIComponent(termo)}`)
+        .then(response => response.json())
+        .then(produto => {
+            if (produto.erro) {
+                mostrarNotificacao('Produto não encontrado!', 'danger');
+                return;
+            }
+
+            // Verificar se produto já está no carrinho
+            const itemExistente = carrinho.find(item => item.id === produto.id);
+            
+            if (itemExistente) {
+                // Aumentar quantidade
+                itemExistente.quantidade += 1;
+                mostrarNotificacao(`Quantidade de ${produto.nome} aumentada!`, 'info');
+            } else {
+                // Adicionar novo item
+                carrinho.push({
+                    id: produto.id,
+                    nome: produto.nome,
+                    preco: produto.preco,
+                    quantidade: 1,
+                    estoque: produto.quantidade
+                });
+                mostrarNotificacao(`${produto.nome} adicionado ao carrinho!`, 'success');
+            }
+
+            atualizarCarrinho();
+        })
+        .catch(error => {
+            console.error('Erro ao buscar produto:', error);
+            mostrarNotificacao('Erro ao buscar produto!', 'danger');
+        });
+}
+
+function atualizarCarrinho() {
+    const tbody = document.getElementById('carrinho-itens');
+    const carrinhoVazio = document.getElementById('carrinho-vazio');
+    const totalElement = document.getElementById('valor-total');
+    const totalItensElement = document.getElementById('total-itens');
+    const btnFinalizar = document.getElementById('btn-finalizar-venda');
+
+    // Calcular total
+    totalVenda = carrinho.reduce((total, item) => total + (item.preco * item.quantidade), 0);
+
+    // Atualizar UI
+    if (carrinho.length === 0) {
+        carrinhoVazio.style.display = '';
+        tbody.innerHTML = '<tr id="carrinho-vazio"><td colspan="5" class="text-center py-4"><i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i><p class="text-muted">Carrinho vazio</p></td></tr>';
+        btnFinalizar.disabled = true;
+    } else {
+        carrinhoVazio.style.display = 'none';
+        
+        tbody.innerHTML = carrinho.map((item, index) => `
+            <tr>
+                <td>
+                    <strong>${item.nome}</strong>
+                    ${item.quantidade > item.estoque ? '<span class="badge bg-danger ms-2">Estoque insuficiente</span>' : ''}
+                </td>
+                <td>R$ ${item.preco.toFixed(2)}</td>
+                <td>
+                    <div class="input-group input-group-sm">
+                        <button class="btn btn-outline-secondary" onclick="alterarQuantidade(${index}, -1)">-</button>
+                        <input type="number" class="form-control text-center" value="${item.quantidade}" 
+                               onchange="alterarQuantidadeInput(${index}, this.value)" min="1" max="${item.estoque}">
+                        <button class="btn btn-outline-secondary" onclick="alterarQuantidade(${index}, 1)">+</button>
+                    </div>
+                </td>
+                <td class="fw-bold">R$ ${(item.preco * item.quantidade).toFixed(2)}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removerItem(${index})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+
+        btnFinalizar.disabled = carrinho.some(item => item.quantidade > item.estoque);
+    }
+
+    totalElement.textContent = totalVenda.toFixed(2);
+    totalItensElement.textContent = carrinho.reduce((total, item) => total + item.quantidade, 0);
+
+    // Atualizar resumo
+    document.getElementById('resumo-itens').textContent = carrinho.reduce((total, item) => total + item.quantidade, 0);
+    document.getElementById('resumo-total').textContent = totalVenda.toFixed(2);
+    document.getElementById('valor-a-receber').textContent = totalVenda.toFixed(2);
+    
+    // Recalcular troco
+    calcularTroco();
+}
+
+// Funções auxiliares (alterarQuantidade, removerItem, calcularTroco, etc.)
+// ... (implementar as funções restantes)
+
+function finalizarVenda() {
+    const formaPagamento = document.getElementById('forma-pagamento').value;
+    const clienteId = document.getElementById('cliente-venda').value || null;
+    const valorPago = parseFloat(document.getElementById('valor-pago').value) || totalVenda;
+
+    const dadosVenda = {
+        itens: carrinho,
+        cliente_id: clienteId,
+        forma_pagamento: formaPagamento,
+        valor_pago: valorPago,
+        troco: formaPagamento === 'dinheiro' ? (valorPago - totalVenda) : 0
+    };
+
+    fetch('/caixa/finalizar', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dadosVenda)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.erro) {
+            mostrarNotificacao(data.erro, 'danger');
+        } else {
+            document.getElementById('numero-venda').textContent = '#' + data.venda_id;
+            new bootstrap.Modal(document.getElementById('modalConfirmacao')).show();
+            novaVenda();
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao finalizar venda:', error);
+        mostrarNotificacao('Erro ao finalizar venda!', 'danger');
+    });
+}
+
+function mostrarNotificacao(mensagem, tipo) {
+    // Implementar notificação toast
+    const alerta = document.createElement('div');
+    alerta.className = `alert alert-${type} alert-dismissible fade show`;
+    alerta.innerHTML = `
+        ${mensagem}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.querySelector('.container-fluid').prepend(alerta);
+    
+    setTimeout(() => alerta.remove(), 3000);
+}
+</script>
 {% endblock %}

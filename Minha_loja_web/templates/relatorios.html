@@ -1,51 +1,462 @@
 {% extends "base.html" %}
-{% block title %}Relatórios{% endblock %}
+
 {% block content %}
-<h2>Relatórios do Sistema</h2>
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1><i class="fas fa-chart-bar me-2"></i>Relatórios do Sistema</h1>
+                <div>
+                    <button class="btn btn-outline-primary me-2" id="btn-exportar-pdf">
+                        <i class="fas fa-file-pdf me-2"></i>Exportar PDF
+                    </button>
+                    <button class="btn btn-outline-success" id="btn-exportar-excel">
+                        <i class="fas fa-file-excel me-2"></i>Exportar Excel
+                    </button>
+                </div>
+            </div>
+            <p class="text-muted">Relatórios completos de estoque, vendas e movimentações</p>
+        </div>
+    </div>
 
-<hr>
-<h3>Estoque Atual de Produtos</h3>
-<table>
-    <thead>
-        <tr>
-            <th>ID</th>
-            <th>Nome</th>
-            <th>Preço</th>
-            <th>Quantidade</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for produto in estoque %}
-        <tr>
-            <td>{{ produto.id }}</td>
-            <td>{{ produto.nome }}</td>
-            <td>R$ {{ "%.2f"|format(produto.preco) }}</td>
-            <td>{{ produto.quantidade }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+    <!-- Filtros e Estatísticas Gerais -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-filter me-2"></i>Filtros do Relatório</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label for="data-inicio" class="form-label">Data Início</label>
+                            <input type="date" class="form-control" id="data-inicio" value="{{ hoje }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="data-fim" class="form-label">Data Fim</label>
+                            <input type="date" class="form-control" id="data-fim" value="{{ hoje }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="tipo-relatorio" class="form-label">Tipo de Relatório</label>
+                            <select class="form-select" id="tipo-relatorio">
+                                <option value="completo">Relatório Completo</option>
+                                <option value="estoque">Apenas Estoque</option>
+                                <option value="movimentacoes">Apenas Movimentações</option>
+                                <option value="vendas">Apenas Vendas</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <button class="btn btn-primary me-2" id="btn-gerar-relatorio">
+                                <i class="fas fa-sync-alt me-2"></i>Atualizar Relatório
+                            </button>
+                            <button class="btn btn-outline-secondary" id="btn-limpar-filtros">
+                                <i class="fas fa-times me-2"></i>Limpar Filtros
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="row">
+                <div class="col-6 mb-3">
+                    <div class="card bg-info text-white">
+                        <div class="card-body text-center py-3">
+                            <i class="fas fa-boxes fa-2x mb-2"></i>
+                            <h5>{{ estatisticas.total_produtos or estoque|length }}</h5>
+                            <small>Total Produtos</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 mb-3">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center py-3">
+                            <i class="fas fa-check-circle fa-2x mb-2"></i>
+                            <h5>{{ estatisticas.produtos_estoque or (estoque|selectattr('quantidade', 'gt', 0)|list|length) }}</h5>
+                            <small>Em Estoque</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="card bg-warning text-white">
+                        <div class="card-body text-center py-3">
+                            <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
+                            <h5>{{ estatisticas.produtos_sem_estoque or (estoque|selectattr('quantidade', 'le', 0)|list|length) }}</h5>
+                            <small>Sem Estoque</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="card bg-secondary text-white">
+                        <div class="card-body text-center py-3">
+                            <i class="fas fa-dollar-sign fa-2x mb-2"></i>
+                            <h5>R$ {{ "%.2f"|format(estatisticas.valor_estoque or 0) }}</h5>
+                            <small>Valor Estoque</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-<hr>
-<h3>Histórico de Movimentação de Estoque</h3>
-<table>
-    <thead>
-        <tr>
-            <th>Produto</th>
-            <th>Tipo</th>
-            <th>Quantidade</th>
-            <th>Data</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for item in movimentacoes %}
-        <tr>
-            <td>{{ item.nome }}</td>
-            <td>{{ item.tipo_movimento }}</td>
-            <td>{{ item.quantidade }}</td>
-            <td>{{ item.data_movimento }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+    <!-- Abas de Navegação -->
+    <ul class="nav nav-tabs mb-4" id="relatoriosTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="estoque-tab" data-bs-toggle="tab" data-bs-target="#estoque" type="button" role="tab">
+                <i class="fas fa-boxes me-2"></i>Estoque Atual
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="movimentacoes-tab" data-bs-toggle="tab" data-bs-target="#movimentacoes" type="button" role="tab">
+                <i class="fas fa-exchange-alt me-2"></i>Movimentações
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="vendas-tab" data-bs-toggle="tab" data-bs-target="#vendas" type="button" role="tab">
+                <i class="fas fa-receipt me-2"></i>Relatório de Vendas
+            </button>
+        </li>
+    </ul>
+
+    <!-- Conteúdo das Abas -->
+    <div class="tab-content" id="relatoriosContent">
+        <!-- Aba 1: Estoque -->
+        <div class="tab-pane fade show active" id="estoque" role="tabpanel">
+            <div class="card">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-boxes me-2"></i>Relatório de Estoque Atual</h5>
+                    <span class="badge bg-light text-dark">{{ estoque|length }} produtos</span>
+                </div>
+                <div class="card-body">
+                    {% if estoque %}
+                    <div class="table-responsive">
+                        <table class="table table-hover table-striped" id="tabela-estoque">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="5%">ID</th>
+                                    <th width="30%">Produto</th>
+                                    <th width="15%">Preço</th>
+                                    <th width="15%">Estoque</th>
+                                    <th width="15%">Status</th>
+                                    <th width="20%">Valor Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for produto in estoque %}
+                                <tr>
+                                    <td><span class="badge bg-secondary">#{{ produto.id }}</span></td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="bg-primary rounded-circle text-white p-2 me-3">
+                                                <i class="fas fa-box"></i>
+                                            </div>
+                                            <div>
+                                                <h6 class="mb-0">{{ produto.nome }}</h6>
+                                                <small class="text-muted">{{ produto.codigo_barras or 'Sem código' }}</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="fw-bold text-success">R$ {{ "%.2f"|format(produto.preco) }}</td>
+                                    <td>
+                                        <span class="fw-bold {% if produto.quantidade > 10 %}text-success{% elif produto.quantidade > 0 %}text-warning{% else %}text-danger{% endif %}">
+                                            {{ produto.quantidade }} un
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if produto.quantidade > 10 %}
+                                        <span class="badge bg-success">Disponível</span>
+                                        {% elif produto.quantidade > 0 %}
+                                        <span class="badge bg-warning">Últimas</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Esgotado</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="fw-bold text-info">R$ {{ "%.2f"|format(produto.preco * produto.quantidade) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="table-dark">
+                                <tr>
+                                    <td colspan="5" class="text-end"><strong>Valor Total do Estoque:</strong></td>
+                                    <td class="fw-bold text-warning">R$ {{ "%.2f"|format(estoque|sum(attribute='preco') * estoque|sum(attribute='quantidade')) }}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-box-open fa-4x text-muted mb-3"></i>
+                        <h4 class="text-muted">Nenhum produto cadastrado</h4>
+                        <p class="text-muted">Não há produtos para exibir no relatório de estoque.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Aba 2: Movimentações -->
+        <div class="tab-pane fade" id="movimentacoes" role="tabpanel">
+            <div class="card">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Histórico de Movimentações de Estoque</h5>
+                    <span class="badge bg-light text-dark">{{ movimentacoes|length }} registros</span>
+                </div>
+                <div class="card-body">
+                    {% if movimentacoes %}
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="tabela-movimentacoes">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="25%">Produto</th>
+                                    <th width="15%">Tipo</th>
+                                    <th width="15%">Quantidade</th>
+                                    <th width="20%">Data/Hora</th>
+                                    <th width="25%">Responsável</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in movimentacoes %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ item.nome }}</strong>
+                                    </td>
+                                    <td>
+                                        {% if item.tipo_movimento == 'entrada' %}
+                                        <span class="badge bg-success"><i class="fas fa-arrow-down me-1"></i> Entrada</span>
+                                        {% else %}
+                                        <span class="badge bg-danger"><i class="fas fa-arrow-up me-1"></i> Saída</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="fw-bold {% if item.tipo_movimento == 'entrada' %}text-success{% else %}text-danger{% endif %}">
+                                            {{ item.quantidade }} un
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">{{ item.data_movimento }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="text-muted">Sistema</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-exchange-alt fa-4x text-muted mb-3"></i>
+                        <h4 class="text-muted">Nenhuma movimentação registrada</h4>
+                        <p class="text-muted">Não há movimentações de estoque para exibir.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Aba 3: Vendas -->
+        <div class="tab-pane fade" id="vendas" role="tabpanel">
+            <div class="card">
+                <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-receipt me-2"></i>Relatório de Vendas</h5>
+                    <span class="badge bg-light text-dark">{{ vendas|length }} vendas</span>
+                </div>
+                <div class="card-body">
+                    {% if vendas %}
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="tabela-vendas">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="10%">ID Venda</th>
+                                    <th width="15%">Data</th>
+                                    <th width="20%">Cliente</th>
+                                    <th width="35%">Produtos</th>
+                                    <th width="10%">Total</th>
+                                    <th width="10%">Pagamento</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for venda in vendas %}
+                                <tr>
+                                    <td><span class="badge bg-secondary">#{{ venda.id }}</span></td>
+                                    <td><small>{{ venda.data_venda }}</small></td>
+                                    <td>{{ venda.cliente_nome or 'Cliente não informado' }}</td>
+                                    <td>
+                                        <div class="produtos-lista">
+                                            {% set produtos_lista = venda.produtos.split('; ') %}
+                                            {% for produto in produtos_lista %}
+                                            <span class="badge bg-light text-dark me-1 mb-1">{{ produto }}</span>
+                                            {% endfor %}
+                                        </div>
+                                    </td>
+                                    <td class="fw-bold text-success">R$ {{ "%.2f"|format(venda.total) }}</td>
+                                    <td><span class="badge bg-info">{{ venda.forma_pagamento or 'N/A' }}</span></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="table-dark">
+                                <tr>
+                                    <td colspan="4" class="text-end"><strong>Total de Vendas:</strong></td>
+                                    <td class="fw-bold text-warning">R$ {{ "%.2f"|format(vendas|sum(attribute='total')) }}</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-receipt fa-4x text-muted mb-3"></i>
+                        <h4 class="text-muted">Nenhuma venda registrada</h4>
+                        <p class="text-muted">Não há vendas para exibir no relatório.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Exportação -->
+<div class="modal fade" id="modalExportacao" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-download me-2"></i>Exportar Relatório</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Selecione o formato e o período para exportação do relatório.
+                </div>
+                <div class="mb-3">
+                    <label for="export-formato" class="form-label">Formato</label>
+                    <select class="form-select" id="export-formato">
+                        <option value="pdf">PDF (Documento)</option>
+                        <option value="excel">Excel (Planilha)</option>
+                        <option value="csv">CSV (Dados)</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="export-periodo" class="form-label">Período</label>
+                    <select class="form-select" id="export-periodo">
+                        <option value="hoje">Hoje</option>
+                        <option value="semana">Esta Semana</option>
+                        <option value="mes">Este Mês</option>
+                        <option value="personalizado">Personalizado</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btn-confirmar-export">
+                    <i class="fas fa-download me-2"></i>Exportar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Configurar data atual como padrão
+    const hoje = new Date().toISOString().split('T')[0];
+    document.getElementById('data-inicio').value = hoje;
+    document.getElementById('data-fim').value = hoje;
+
+    // Event listeners
+    document.getElementById('btn-gerar-relatorio').addEventListener('click', gerarRelatorio);
+    document.getElementById('btn-limpar-filtros').addEventListener('click', limparFiltros);
+    document.getElementById('btn-exportar-pdf').addEventListener('click', () => abrirModalExportacao('pdf'));
+    document.getElementById('btn-exportar-excel').addEventListener('click', () => abrirModalExportacao('excel'));
+    document.getElementById('btn-confirmar-export').addEventListener('click', confirmarExportacao);
+
+    // Inicializar tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+
+function gerarRelatorio() {
+    const dataInicio = document.getElementById('data-inicio').value;
+    const dataFim = document.getElementById('data-fim').value;
+    const tipoRelatorio = document.getElementById('tipo-relatorio').value;
+
+    // Simular carregamento
+    const btn = document.getElementById('btn-gerar-relatorio');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Gerando...';
+    btn.disabled = true;
+
+    // Simular processamento
+    setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        mostrarNotificacao('Relatório atualizado com sucesso!', 'success');
+    }, 1000);
+}
+
+function limparFiltros() {
+    document.getElementById('data-inicio').value = '';
+    document.getElementById('data-fim').value = '';
+    document.getElementById('tipo-relatorio').value = 'completo';
+    mostrarNotificacao('Filtros limpos!', 'info');
+}
+
+function abrirModalExportacao(formato) {
+    document.getElementById('export-formato').value = formato;
+    new bootstrap.Modal(document.getElementById('modalExportacao')).show();
+}
+
+function confirmarExportacao() {
+    const formato = document.getElementById('export-formato').value;
+    const periodo = document.getElementById('export-periodo').value;
+    
+    mostrarNotificacao(`Exportando relatório em ${formato.toUpperCase()} para o período: ${periodo}`, 'info');
+    bootstrap.Modal.getInstance(document.getElementById('modalExportacao')).hide();
+}
+
+function mostrarNotificacao(mensagem, tipo) {
+    const alerta = document.createElement('div');
+    alerta.className = `alert alert-${type} alert-dismissible fade show`;
+    alerta.innerHTML = `
+        ${mensagem}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.querySelector('.container-fluid').prepend(alerta);
+    
+    setTimeout(() => alerta.remove(), 4000);
+}
+</script>
+
+<style>
+.produtos-lista {
+    max-height: 80px;
+    overflow-y: auto;
+}
+
+.nav-tabs .nav-link {
+    font-weight: 500;
+}
+
+.nav-tabs .nav-link.active {
+    border-bottom: 3px solid var(--primary);
+    font-weight: 600;
+}
+
+.table-responsive {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.badge {
+    font-size: 0.75em;
+}
+</style>
 {% endblock %}
