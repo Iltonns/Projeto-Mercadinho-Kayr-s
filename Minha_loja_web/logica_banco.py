@@ -351,20 +351,48 @@ def buscar_produto_por_id(id):
     return produto
 
 def buscar_produto_por_codigo(codigo):
-    """Busca produto por código ou nome"""
-    codigo = sanitizar_input(codigo)
+    """Busca produto por código de barras ou nome - CORRIGIDA"""
+    if not codigo:
+        return None
+        
+    codigo_limpo = sanitizar_input(codigo)
     db = DatabaseManager()
     
     if not db.connect():
         return None
         
-    produto = db.fetch_one(
-        "SELECT * FROM produtos WHERE codigo_barras = ? OR nome LIKE ?", 
-        (codigo, f'%{codigo}%')
-    )
-    db.disconnect()
-    return produto
-
+    try:
+        print(f"🔍 [DB] Buscando produto: '{codigo_limpo}'")
+        
+        # Primeiro: buscar por código de barras EXATO
+        if codigo_limpo:
+            produto = db.fetch_one(
+                "SELECT * FROM produtos WHERE codigo_barras = ?", 
+                (codigo_limpo,)
+            )
+            if produto:
+                print(f"✅ [DB] Encontrado por código de barras: {dict(produto)['nome']}")
+                return produto
+        
+        # Segundo: buscar por nome (LIKE) - case insensitive
+        produto = db.fetch_one(
+            "SELECT * FROM produtos WHERE nome LIKE ?", 
+            (f'%{codigo_limpo}%',)
+        )
+        
+        if produto:
+            print(f"✅ [DB] Encontrado por nome: {dict(produto)['nome']}")
+        else:
+            print("❌ [DB] Nenhum produto encontrado")
+            
+        return produto
+        
+    except Exception as e:
+        print(f"❌ [DB] Erro na busca: {e}")
+        return None
+    finally:
+        db.disconnect()
+               
 def atualizar_produto(id, nome, preco, quantidade, codigo_barras=None):
     """Atualiza produto com validações"""
     nome = sanitizar_input(nome)
@@ -396,10 +424,20 @@ def atualizar_produto(id, nome, preco, quantidade, codigo_barras=None):
             if existente:
                 return False, "Código de barras já existe em outro produto"
         
-        cursor = db.execute_query(
-            "UPDATE produtos SET nome = ?, preco = ?, quantidade = ?, codigo_barras = ?, data_atualizacao = CURRENT_TIMESTAMP WHERE id = ?", 
-            (nome, preco_float, qtd_int, codigo_barras, id)
-        )
+        # VERIFICAR SE A COLUNA data_atualizacao EXISTE
+        # Primeiro, vamos verificar a estrutura da tabela
+        colunas = db.fetch_all("PRAGMA table_info(produtos)")
+        colunas_existentes = [coluna['name'] for coluna in colunas]
+        
+        # Construir a query dinamicamente baseado nas colunas existentes
+        if 'data_atualizacao' in colunas_existentes:
+            query = "UPDATE produtos SET nome = ?, preco = ?, quantidade = ?, codigo_barras = ?, data_atualizacao = datetime('now') WHERE id = ?"
+            params = (nome, preco_float, qtd_int, codigo_barras, id)
+        else:
+            query = "UPDATE produtos SET nome = ?, preco = ?, quantidade = ?, codigo_barras = ? WHERE id = ?"
+            params = (nome, preco_float, qtd_int, codigo_barras, id)
+        
+        cursor = db.execute_query(query, params)
         
         if cursor:
             return True, "Produto atualizado com sucesso"

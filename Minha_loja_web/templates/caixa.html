@@ -200,18 +200,39 @@ let totalVenda = 0;
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', function() {
+    console.log("🔄 Inicializando caixa...");
     inicializarCaixa();
 });
 
 function inicializarCaixa() {
+    console.log("🎯 Configurando eventos do caixa...");
+    
     // Configurar busca de produtos
     const buscaInput = document.getElementById('busca-produto');
     buscaInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
-            buscarEAdicionarProduto(this.value);
-            this.value = '';
+            const termo = this.value.trim();
+            console.log("🔍 Buscando produto:", termo);
+            if (termo) {
+                buscarEAdicionarProduto(termo);
+                this.value = ''; // Limpar campo após busca
+            } else {
+                mostrarNotificacao('Digite algo para buscar!', 'warning');
+            }
         }
     });
+
+    // Botão de busca manual
+    const btnBuscar = document.getElementById('btn-scan');
+    if (btnBuscar) {
+        btnBuscar.addEventListener('click', function() {
+            const termo = buscaInput.value.trim();
+            if (termo) {
+                buscarEAdicionarProduto(termo);
+                buscaInput.value = '';
+            }
+        });
+    }
 
     // Configurar forma de pagamento
     const formaPagamento = document.getElementById('forma-pagamento');
@@ -219,7 +240,9 @@ function inicializarCaixa() {
 
     // Configurar valor pago
     const valorPago = document.getElementById('valor-pago');
-    valorPago.addEventListener('input', calcularTroco);
+    if (valorPago) {
+        valorPago.addEventListener('input', calcularTroco);
+    }
 
     // Botões
     document.getElementById('btn-finalizar-venda').addEventListener('click', finalizarVenda);
@@ -228,47 +251,90 @@ function inicializarCaixa() {
 
     // Inicializar campos de pagamento
     atualizarCamposPagamento();
+    
+    console.log("✅ Caixa inicializado com sucesso!");
 }
 
 function buscarEAdicionarProduto(termo) {
-    if (!termo.trim()) return;
+    if (!termo || termo.trim().length < 1) {
+        mostrarNotificacao('Digite um código ou nome do produto!', 'warning');
+        return;
+    }
 
+    console.log("🔍 Iniciando busca por:", termo);
+    
+    // Mostrar loading
+    const buscaInput = document.getElementById('busca-produto');
+    buscaInput.disabled = true;
+    buscaInput.placeholder = 'Buscando...';
+    
+    // Fazer a requisição
     fetch(`/api/buscar_produto/${encodeURIComponent(termo)}`)
-        .then(response => response.json())
-        .then(produto => {
-            if (produto.erro) {
-                mostrarNotificacao('Produto não encontrado!', 'danger');
+        .then(response => {
+            console.log("📡 Resposta recebida, status:", response.status);
+            
+            if (!response.ok) {
+                throw new Error(`Erro HTTP: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log("📦 Dados recebidos:", data);
+            
+            // Verificar se é um erro
+            if (data.erro) {
+                mostrarNotificacao(`❌ ${data.erro}`, 'danger');
+                return;
+            }
+
+            // Verificar se produto tem estoque
+            if (data.quantidade <= 0) {
+                mostrarNotificacao(`📦 "${data.nome}" está sem estoque!`, 'danger');
                 return;
             }
 
             // Verificar se produto já está no carrinho
-            const itemExistente = carrinho.find(item => item.id === produto.id);
+            const itemExistente = carrinho.find(item => item.id === data.id);
             
             if (itemExistente) {
-                // Aumentar quantidade
+                // Verificar se pode aumentar quantidade
+                if (itemExistente.quantidade >= data.quantidade) {
+                    mostrarNotificacao(`⚠️ Estoque insuficiente! Disponível: ${data.quantidade}`, 'warning');
+                    return;
+                }
+                
                 itemExistente.quantidade += 1;
-                mostrarNotificacao(`Quantidade de ${produto.nome} aumentada!`, 'info');
+                mostrarNotificacao(`➕ Quantidade de ${data.nome} aumentada!`, 'info');
             } else {
                 // Adicionar novo item
                 carrinho.push({
-                    id: produto.id,
-                    nome: produto.nome,
-                    preco: produto.preco,
+                    id: data.id,
+                    nome: data.nome,
+                    preco: parseFloat(data.preco),
                     quantidade: 1,
-                    estoque: produto.quantidade
+                    estoque: parseInt(data.quantidade)
                 });
-                mostrarNotificacao(`${produto.nome} adicionado ao carrinho!`, 'success');
+                mostrarNotificacao(`✅ ${data.nome} adicionado ao carrinho! R$ ${data.preco}`, 'success');
             }
 
             atualizarCarrinho();
         })
         .catch(error => {
-            console.error('Erro ao buscar produto:', error);
-            mostrarNotificacao('Erro ao buscar produto!', 'danger');
+            console.error('❌ Erro na busca:', error);
+            mostrarNotificacao('❌ Erro ao buscar produto! Verifique o console.', 'danger');
+        })
+        .finally(() => {
+            // Restaurar campo de busca
+            buscaInput.disabled = false;
+            buscaInput.placeholder = 'Digite o código ou nome e pressione Enter...';
+            buscaInput.focus();
+            console.log("🔄 Busca finalizada");
         });
 }
 
 function atualizarCarrinho() {
+    console.log("🛒 Atualizando carrinho...");
+    
     const tbody = document.getElementById('carrinho-itens');
     const carrinhoVazio = document.getElementById('carrinho-vazio');
     const totalElement = document.getElementById('valor-total');
@@ -277,6 +343,7 @@ function atualizarCarrinho() {
 
     // Calcular total
     totalVenda = carrinho.reduce((total, item) => total + (item.preco * item.quantidade), 0);
+    console.log("💰 Total da venda:", totalVenda);
 
     // Atualizar UI
     if (carrinho.length === 0) {
@@ -323,49 +390,52 @@ function atualizarCarrinho() {
     
     // Recalcular troco
     calcularTroco();
+    
+    console.log("✅ Carrinho atualizado. Itens:", carrinho.length);
 }
 
-// Funções auxiliares (alterarQuantidade, removerItem, calcularTroco, etc.)
-// ... (implementar as funções restantes)
+// Funções auxiliares (adicionar estas também)
+window.alterarQuantidade = function(index, cambio) {
+    const novoValor = carrinho[index].quantidade + cambio;
+    if (novoValor >= 1 && novoValor <= carrinho[index].estoque) {
+        carrinho[index].quantidade = novoValor;
+        atualizarCarrinho();
+    }
+}
 
-function finalizarVenda() {
+window.alterarQuantidadeInput = function(index, valor) {
+    const novoValor = parseInt(valor) || 1;
+    if (novoValor >= 1 && novoValor <= carrinho[index].estoque) {
+        carrinho[index].quantidade = novoValor;
+        atualizarCarrinho();
+    } else {
+        // Restaurar valor anterior
+        const input = document.querySelector(`#carrinho-itens tr:nth-child(${index + 1}) input`);
+        input.value = carrinho[index].quantidade;
+    }
+}
+
+window.removerItem = function(index) {
+    const produtoNome = carrinho[index].nome;
+    carrinho.splice(index, 1);
+    atualizarCarrinho();
+    mostrarNotificacao(`🗑️ ${produtoNome} removido do carrinho`, 'info');
+}
+
+function calcularTroco() {
     const formaPagamento = document.getElementById('forma-pagamento').value;
-    const clienteId = document.getElementById('cliente-venda').value || null;
-    const valorPago = parseFloat(document.getElementById('valor-pago').value) || totalVenda;
-
-    const dadosVenda = {
-        itens: carrinho,
-        cliente_id: clienteId,
-        forma_pagamento: formaPagamento,
-        valor_pago: valorPago,
-        troco: formaPagamento === 'dinheiro' ? (valorPago - totalVenda) : 0
-    };
-
-    fetch('/caixa/finalizar', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(dadosVenda)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.erro) {
-            mostrarNotificacao(data.erro, 'danger');
-        } else {
-            document.getElementById('numero-venda').textContent = '#' + data.venda_id;
-            new bootstrap.Modal(document.getElementById('modalConfirmacao')).show();
-            novaVenda();
+    if (formaPagamento === 'dinheiro') {
+        const valorPago = parseFloat(document.getElementById('valor-pago').value) || 0;
+        const troco = valorPago - totalVenda;
+        const trocoElement = document.getElementById('valor-troco');
+        
+        if (trocoElement) {
+            trocoElement.textContent = troco >= 0 ? troco.toFixed(2) : '0.00';
         }
-    })
-    .catch(error => {
-        console.error('Erro ao finalizar venda:', error);
-        mostrarNotificacao('Erro ao finalizar venda!', 'danger');
-    });
+    }
 }
 
 function mostrarNotificacao(mensagem, tipo) {
-    // Implementar notificação toast
     const alerta = document.createElement('div');
     alerta.className = `alert alert-${type} alert-dismissible fade show`;
     alerta.innerHTML = `
@@ -374,7 +444,59 @@ function mostrarNotificacao(mensagem, tipo) {
     `;
     document.querySelector('.container-fluid').prepend(alerta);
     
-    setTimeout(() => alerta.remove(), 3000);
+    setTimeout(() => alerta.remove(), 4000);
+}
+
+// ... (outras funções do caixa)
+
+document.addEventListener('DOMContentLoaded', function() {
+    const buscaInput = document.getElementById('busca-produto');
+    
+    buscaInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            const termo = this.value.trim();
+            if (termo) {
+                buscarEAdicionarProduto(termo);
+                this.value = ''; // Limpar campo após busca
+            }
+        }
+    });
+});
+
+// Adicionar esta função auxiliar no caixa.html
+function mostrarLoadingBusca(mostrar) {
+    const buscaInput = document.getElementById('busca-produto');
+    const btnScan = document.getElementById('btn-scan');
+    
+    if (mostrar) {
+        buscaInput.placeholder = 'Buscando produto...';
+        buscaInput.disabled = true;
+        btnScan.disabled = true;
+    } else {
+        buscaInput.placeholder = 'Digite o código ou nome e pressione Enter...';
+        buscaInput.disabled = false;
+        btnScan.disabled = false;
+    }
+}
+
+// Atualizar a função buscarEAdicionarProduto:
+function buscarEAdicionarProduto(termo) {
+    if (!termo.trim()) {
+        mostrarNotificacao('Digite um código ou nome do produto!', 'warning');
+        return;
+    }
+
+    mostrarLoadingBusca(true);
+    
+    fetch(`/api/buscar_produto/${encodeURIComponent(termo)}`)
+        .then(response => {
+            mostrarLoadingBusca(false);
+            // ... resto do código igual acima
+        })
+        .catch(error => {
+            mostrarLoadingBusca(false);
+            // ... tratamento de erro
+        });
 }
 </script>
 {% endblock %}

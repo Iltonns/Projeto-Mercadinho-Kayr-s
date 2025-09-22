@@ -489,15 +489,31 @@ def caixa():
 @app.route('/api/buscar_produto/<code>')
 @login_required
 def api_buscar_produto(code):
-    """API para buscar produto por código"""
+    """API para buscar produto por código ou nome - COM DEBUG"""
     try:
+        print(f"🔍 [DEBUG] Buscando produto por: '{code}'")
+        
         code = sanitizar_input(code)
+        
+        if not code or len(code) < 1:
+            print("❌ [DEBUG] Termo de busca vazio")
+            return jsonify({'erro': 'Termo de busca inválido'}), 400
+        
+        # Buscar o produto
         produto = db.buscar_produto_por_codigo(code)
+        print(f"📦 [DEBUG] Resultado da busca: {produto}")
+        
         if produto:
-            return jsonify(dict(produto))
+            # Converter Row para dict
+            produto_dict = dict(produto)
+            print(f"✅ [DEBUG] Produto encontrado: {produto_dict['nome']}")
+            return jsonify(produto_dict)
         else:
+            print("❌ [DEBUG] Produto não encontrado")
             return jsonify({'erro': 'Produto não encontrado'}), 404
+            
     except Exception as e:
+        print(f"💥 [DEBUG] Erro na API: {str(e)}")
         return jsonify({'erro': 'Erro interno do servidor'}), 500
 
 @app.route('/caixa/finalizar', methods=['POST'])
