@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Relatórios{% endblock %}
+{% block content %}
+<h2>Relatórios do Sistema</h2>
+
+<hr>
+<h3>Estoque Atual de Produtos</h3>
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Nome</th>
+            <th>Preço</th>
+            <th>Quantidade</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for produto in estoque %}
+        <tr>
+            <td>{{ produto.id }}</td>
+            <td>{{ produto.nome }}</td>
+            <td>R$ {{ "%.2f"|format(produto.preco) }}</td>
+            <td>{{ produto.quantidade }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<hr>
+<h3>Histórico de Movimentação de Estoque</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Produto</th>
+            <th>Tipo</th>
+            <th>Quantidade</th>
+            <th>Data</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in movimentacoes %}
+        <tr>
+            <td>{{ item.nome }}</td>
+            <td>{{ item.tipo_movimento }}</td>
+            <td>{{ item.quantidade }}</td>
+            <td>{{ item.data_movimento }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

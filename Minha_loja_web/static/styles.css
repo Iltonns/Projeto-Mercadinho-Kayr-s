@@ -1,0 +1,214 @@
+/* Arquivo: static/styles.css */
+
+/* --- Estilos Gerais e Variáveis de Cor --- */
+:root {
+    --cor-primaria: #fbff05;
+    --cor-secundaria: #fbff01;
+    --cor-sucesso: #28a745;
+    --cor-perigo: #dc3545;
+    --cor-fundo: #fffb01;
+    --cor-texto: #030300;
+    --borda-radius: 5px;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    margin: 0;
+    background-color: var(--cor-fundo);
+    color: var(--cor-texto);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* --- Layout Principal: Header, Main, Footer --- */
+header {
+    background-color: #000000;
+    padding: 1rem 2rem;
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+header h1 {
+    margin: 0;
+    color: var(--cor-primaria);
+}
+
+main {
+    flex-grow: 1; /* Faz o conteúdo principal ocupar o espaço disponível */
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+footer {
+    text-align: center;
+    padding: 1rem;
+    background-color: #000000;
+    border-top: 1px solid #000000;
+    font-size: 0.9em;
+    color: var(--cor-secundaria);
+}
+
+/* --- Navegação --- */
+nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+}
+
+nav ul li {
+    margin-left: 1.5rem;
+}
+
+nav ul li a {
+    text-decoration: none;
+    color: var(--cor-secundaria);
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+nav ul li a:hover {
+    color: var(--cor-primaria);
+}
+
+/* --- Tabelas --- */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1.5rem;
+    background-color: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+table thead {
+    background-color: #e9ecef;
+}
+
+table th, table td {
+    padding: 0.75rem 1rem;
+    border: 1px solid #dee2e6;
+    text-align: left;
+}
+
+td.actions {
+    display: flex;
+    gap: 0.5rem; /* Espaçamento entre os botões de ação */
+}
+
+/* --- Botões --- */
+.btn {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-align: center;
+    text-decoration: none;
+    border-radius: var(--borda-radius);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.btn-primary {
+    background-color: #0fb903;
+    color: #000000;
+}
+.btn-primary:hover {
+    background-color: #0056b3;
+}
+
+.btn-secondary {
+    background-color: #0fb903;
+    color: #000000;
+}
+.btn-secondary:hover {
+    background-color: #0056b3;
+}
+
+.btn-danger {
+    background-color: var(--cor-perigo);
+    color: #fff;
+}
+.btn-danger:hover {
+    background-color: #c82333;
+}
+
+/* --- Formulários --- */
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"] {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ced4da;
+    border-radius: var(--borda-radius);
+    box-sizing: border-box; /* Garante que padding não aumente a largura total */
+}
+
+.form-actions {
+    margin-top: 1.5rem;
+    display: flex;
+    gap: 1rem;
+}
+
+/* --- Mensagens Flash --- */
+.flash-messages {
+    padding: 0;
+    list-style: none;
+    margin-bottom: 1.5rem;
+}
+
+.alert {
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid transparent;
+    border-radius: var(--borda-radius);
+}
+
+.alert-success {
+    color: #155724;
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+}
+
+.alert-info {
+    color: #0c5460;
+    background-color: #d1ecf1;
+    border-color: #bee5eb;
+}
+
+.alert-error {
+    color: #721c24;
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+}
+
+/* --- Utilitários --- */
+.header-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+/* Adicione ao final de static/styles.css */
+.caixa-container { display: flex; gap: 2rem; }
+.painel-venda { flex: 3; }
+.painel-pagamento { flex: 1; border-left: 1px solid #ccc; padding-left: 2rem; }
+.tabela-caixa { width: 100%; }
+.total-container { text-align: right; font-size: 1.5rem; margin-top: 1rem; }
+.troco-container { font-size: 1.2rem; color: var(--cor-sucesso); }
+.btn-grande { width: 100%; padding: 1rem; font-size: 1.2rem; margin-top: 1rem; }

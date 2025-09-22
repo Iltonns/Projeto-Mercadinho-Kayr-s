@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Caixa - Ponto de Venda{% endblock %}
+
+{% block content %}
+<div class="caixa-container">
+    <div class="painel-venda">
+        <h2>Registro de Venda</h2>
+
+        <div class="form-group">
+            <label for="busca-produto">Buscar Produto (Nome ou Cód. Barras):</label>
+            <input type="text" id="busca-produto" placeholder="Digite o código e pressione Enter..." autofocus>
+        </div>
+
+        <h3>Carrinho</h3>
+        <table class="tabela-caixa">
+            <thead>
+                <tr>
+                    <th>Produto</th>
+                    <th>Qtd.</th>
+                    <th>Preço Unit.</th>
+                    <th>Subtotal</th>
+                    <th>Ação</th>
+                </tr>
+            </thead>
+            <tbody id="carrinho-itens">
+                </tbody>
+        </table>
+
+        <div class="total-container">
+            <strong>TOTAL: R$ <span id="valor-total">0.00</span></strong>
+        </div>
+    </div>
+
+    <div class="painel-pagamento">
+        <h2>Pagamento</h2>
+        <div class="form-group">
+            <label for="forma-pagamento">Forma de Pagamento:</label>
+            <select id="forma-pagamento" name="forma_pagamento">
+                <option value="dinheiro">Dinheiro</option>
+                <option value="cartao_debito">Cartão de Débito</option>
+                <option value="cartao_credito">Cartão de Crédito</option>
+                <option value="pix">Pix</option>
+            </select>
+        </div>
+        <div class="form-group" id="campo-valor-pago">
+            <label for="valor-pago">Valor Entregue (R$):</label>
+            <input type="number" step="0.01" id="valor-pago" placeholder="0.00">
+        </div>
+        <div class="troco-container">
+            <strong>Troco: R$ <span id="valor-troco">0.00</span></strong>
+        </div>
+        <button id="btn-finalizar-venda" class="btn btn-primary btn-grande">Finalizar Venda</button>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='caixa.js') }}"></script>
+{% endblock %}

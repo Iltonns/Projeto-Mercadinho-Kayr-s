@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Histórico de Vendas{% endblock %}
+{% block content %}
+<div class="header-container">
+    <h2>Histórico de Vendas</h2>
+    <a href="{{ url_for('nova_venda') }}" class="btn btn-primary">Registrar Nova Venda</a>
+</div>
+<table>
+    <thead>
+        <tr>
+            <th>ID Venda</th>
+            <th>Data</th>
+            <th>Cliente</th>
+            <th>Produtos</th>
+            <th>Total</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for venda in vendas %}
+        <tr>
+            <td>{{ venda.id }}</td>
+            <td>{{ venda.data_venda }}</td>
+            <td>{{ venda.cliente_nome or 'N/A' }}</td>
+            <td>{{ venda.produtos }}</td>
+            <td>R$ {{ "%.2f"|format(venda.total) }}</td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="5">Nenhuma venda registrada.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

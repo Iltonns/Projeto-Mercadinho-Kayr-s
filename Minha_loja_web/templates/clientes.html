@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Gerenciar Clientes{% endblock %}
+{% block content %}
+<div class="header-container">
+    <h2>Lista de Clientes</h2>
+    <a href="{{ url_for('adicionar_cliente') }}" class="btn btn-primary">Adicionar Novo Cliente</a>
+</div>
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Nome</th>
+            <th>Telefone</th>
+            <th>Email</th>
+            <th>Ações</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for cliente in clientes %}
+        <tr>
+            <td>{{ cliente.id }}</td>
+            <td>{{ cliente.nome }}</td>
+            <td>{{ cliente.telefone }}</td>
+            <td>{{ cliente.email }}</td>
+            <td class="actions">
+                <a href="{{ url_for('editar_cliente', id=cliente.id) }}" class="btn btn-secondary">Editar</a>
+                <form action="{{ url_for('excluir_cliente', id=cliente.id) }}" method="POST" style="display:inline;">
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('Tem certeza?');">Excluir</button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="5">Nenhum cliente cadastrado.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
