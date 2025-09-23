@@ -566,7 +566,7 @@ def excluir_cliente(id):
 
 # --- FUNÇÕES DE VENDAS MELHORADAS ---
 def registrar_venda_completa(cliente_id, itens_carrinho, total, forma_pagamento, valor_pago, troco):
-    """Registra venda completa com transação segura"""
+    """Registra venda completa com transação segura - CORRIGIDA"""
     if not itens_carrinho:
         return None, "Carrinho vazio"
     
@@ -581,6 +581,15 @@ def registrar_venda_completa(cliente_id, itens_carrinho, total, forma_pagamento,
     venda_id = None
     try:
         data_venda = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # CORREÇÃO: Verificar estoque ANTES de iniciar a transação
+        for item in itens_carrinho:
+            produto = buscar_produto_por_id(item['id'])
+            if not produto:
+                return None, f"Produto ID {item['id']} não encontrado"
+            
+            if produto['quantidade'] < item['qtd']:
+                return None, f"Estoque insuficiente para {produto['nome']}. Disponível: {produto['quantidade']}, Solicitado: {item['qtd']}"
         
         # Iniciar transação
         cursor = db.execute_query(
@@ -597,15 +606,8 @@ def registrar_venda_completa(cliente_id, itens_carrinho, total, forma_pagamento,
         # Registrar itens da venda e atualizar estoque
         for item in itens_carrinho:
             produto = buscar_produto_por_id(item['id'])
-            if not produto:
-                db.conn.rollback()
-                return None, f"Produto ID {item['id']} não encontrado"
             
-            if produto['quantidade'] < item['qtd']:
-                db.conn.rollback()
-                return None, f"Estoque insuficiente para {produto['nome']}"
-            
-            # Registrar item da venda
+            # CORREÇÃO: Registrar item da venda
             cursor_item = db.execute_query(
                 "INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario) VALUES (?, ?, ?, ?)", 
                 (venda_id, item['id'], item['qtd'], produto['preco'])
@@ -615,8 +617,14 @@ def registrar_venda_completa(cliente_id, itens_carrinho, total, forma_pagamento,
                 db.conn.rollback()
                 return None, "Erro ao registrar item da venda"
             
-            # Atualizar estoque
+            # CORREÇÃO: Atualizar estoque de forma mais segura
             nova_quantidade = produto['quantidade'] - item['qtd']
+            
+            # Verificar se a quantidade não fica negativa
+            if nova_quantidade < 0:
+                db.conn.rollback()
+                return None, f"Erro: Estoque ficaria negativo para {produto['nome']}"
+            
             cursor_estoque = db.execute_query(
                 "UPDATE produtos SET quantidade = ?, data_atualizacao = CURRENT_TIMESTAMP WHERE id = ?", 
                 (nova_quantidade, item['id'])
@@ -624,7 +632,7 @@ def registrar_venda_completa(cliente_id, itens_carrinho, total, forma_pagamento,
             
             if not cursor_estoque:
                 db.conn.rollback()
-                return None, "Erro ao atualizar estoque"
+                return None, f"Erro ao atualizar estoque do produto {produto['nome']}"
             
             # Registrar saída no histórico
             db.execute_query(
@@ -638,6 +646,7 @@ def registrar_venda_completa(cliente_id, itens_carrinho, total, forma_pagamento,
     except Exception as e:
         if db.conn:
             db.conn.rollback()
+        print(f"❌ ERRO DETALHADO na venda: {str(e)}")  # Log detalhado
         return None, f"Erro ao registrar venda: {str(e)}"
     finally:
         db.disconnect()
