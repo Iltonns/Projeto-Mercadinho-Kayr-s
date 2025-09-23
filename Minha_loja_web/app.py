@@ -1,13 +1,19 @@
 # ==============================================================================
 # 1. IMPORTS MELHORADOS
 # ==============================================================================
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from datetime import datetime
 from werkzeug.security import check_password_hash
 import logica_banco as db
 import re
 import os
+import io
+import pandas as pd
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
 
 # ==============================================================================
 # 2. CONFIGURAÇÃO INICIAL DA APLICAÇÃO E EXTENSÕES MELHORADA
@@ -228,10 +234,10 @@ def index():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    """Dashboard administrativo com estatísticas"""
+    """Dashboard administrativo com estatísticas - CORRIGIDA"""
     try:
         estatisticas = db.get_estatisticas_gerais()
-        produtos_recentes = db.listar_produtos()[:5]  # Últimos 5 produtos
+        produtos_recentes = db.listar_produtos()[:5]  # ← Agora funciona corretamente
         
         return render_template('dashboard.html', 
                              estatisticas=estatisticas,
@@ -241,7 +247,7 @@ def dashboard():
         return redirect(url_for('produtos'))
 
 # ==============================================================================
-# 9. ROTAS DE PRODUTOS MELHORADAS (CRUD)
+# 9. ROTAS DE PRODUTOS MELHORADAS (CRUD) - CORRIGIDAS
 # ==============================================================================
 @app.route('/produtos')
 @login_required
@@ -374,6 +380,148 @@ def excluir_produto(id):
     return redirect(url_for('produtos'))
 
 # ==============================================================================
+# 9.1 ROTAS DE BUSCA DE PRODUTOS - NOVAS E CORRIGIDAS
+# ==============================================================================
+@app.route('/buscar_produto_caixa', methods=['POST'])
+@login_required
+def buscar_produto_caixa():
+    """Busca de produtos para o caixa - CORRIGIDA"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'Dados inválidos'})
+        
+        codigo = sanitizar_input(data.get('codigo', ''))
+        
+        if not codigo:
+            return jsonify({'success': False, 'message': 'Código ou nome do produto é obrigatório'})
+        
+        # Buscar produto por código ou nome
+        produto = db.buscar_produto_por_codigo(codigo)
+        if not produto:
+            # Tentar buscar por nome se não encontrar por código
+            produtos = db.listar_produtos()
+            for prod in produtos:
+                if codigo.lower() in prod['nome'].lower():
+                    produto = prod
+                    break
+        
+        if produto:
+            return jsonify({
+                'success': True,
+                'produto': {
+                    'id': produto['id'],
+                    'nome': produto['nome'],
+                    'preco': produto['preco'],
+                    'quantidade': produto['quantidade'],
+                    'codigo': produto.get('codigo_barras', '')
+                }
+            })
+        else:
+            return jsonify({'success': False, 'message': 'Produto não encontrado'})
+            
+    except Exception as e:
+        print(f"Erro na busca: {e}")
+        return jsonify({'success': False, 'message': 'Erro interno do servidor'})
+
+@app.route('/buscar_produto_estoque', methods=['POST'])
+@login_required
+def buscar_produto_estoque():
+    """Busca de produtos para o estoque - CORRIGIDA"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'Dados inválidos'})
+        
+        codigo = sanitizar_input(data.get('codigo', ''))
+        
+        if not codigo:
+            return jsonify({'success': False, 'message': 'Código ou nome do produto é obrigatório'})
+        
+        # Buscar produto por código ou nome
+        produto = db.buscar_produto_por_codigo(codigo)
+        if not produto:
+            # Tentar buscar por nome se não encontrar por código
+            produtos = db.listar_produtos()
+            for prod in produtos:
+                if codigo.lower() in prod['nome'].lower():
+                    produto = prod
+                    break
+        
+        if produto:
+            return jsonify({
+                'success': True,
+                'produto': {
+                    'id': produto['id'],
+                    'nome': produto['nome'],
+                    'preco': produto['preco'],
+                    'quantidade': produto['quantidade'],
+                    'codigo': produto.get('codigo_barras', '')
+                }
+            })
+        else:
+            return jsonify({'success': False, 'message': 'Produto não encontrado'})
+            
+    except Exception as e:
+        print(f"Erro na busca: {e}")
+        return jsonify({'success': False, 'message': 'Erro interno do servidor'})
+
+# ==============================================================================
+# 9.2 ROTA DE ATUALIZAÇÃO DE PRODUTOS - CORRIGIDA
+# ==============================================================================
+@app.route('/atualizar_produto', methods=['POST'])
+@login_required
+def atualizar_produto():
+    """Atualizar produto - CORRIGIDA"""
+    try:
+        produto_id = request.form.get('produto_id')
+        nome = sanitizar_input(request.form.get('nome', ''))
+        preco = request.form.get('preco', '')
+        quantidade = request.form.get('quantidade', '')
+        codigo = sanitizar_input(request.form.get('codigo_barras', ''))
+        
+        if not produto_id:
+            flash('ID do produto é obrigatório', 'error')
+            return redirect('/estoque')
+        
+        # Validações
+        if not nome or len(nome) < 2:
+            flash('Nome do produto deve ter pelo menos 2 caracteres.', 'error')
+            return redirect('/estoque')
+
+        try:
+            preco_float = float(preco)
+            if preco_float <= 0:
+                flash('Preço deve ser maior que zero.', 'error')
+                return redirect('/estoque')
+        except (ValueError, TypeError):
+            flash('Preço inválido.', 'error')
+            return redirect('/estoque')
+
+        try:
+            quantidade_int = int(quantidade)
+            if quantidade_int < 0:
+                flash('Quantidade não pode ser negativa.', 'error')
+                return redirect('/estoque')
+        except (ValueError, TypeError):
+            flash('Quantidade inválida.', 'error')
+            return redirect('/estoque')
+
+        # Atualizar produto
+        sucesso, mensagem = db.atualizar_produto(int(produto_id), nome, preco_float, quantidade_int, codigo)
+        
+        if sucesso:
+            flash('Produto atualizado com sucesso!', 'success')
+        else:
+            flash(mensagem, 'error')
+        
+        return redirect('/estoque')
+        
+    except Exception as e:
+        flash(f'Erro ao atualizar produto: {str(e)}', 'error')
+        return redirect('/estoque')
+
+# ==============================================================================
 # 10. ROTAS DE CLIENTES MELHORADAS (CRUD)
 # ==============================================================================
 @app.route('/clientes')
@@ -503,12 +651,13 @@ def caixa():
 @app.route('/api/buscar_produto/<code>')
 @login_required
 def api_buscar_produto(code):
-    """API para buscar produto por código"""
+    """API para buscar produto por código - CORRIGIDA"""
     try:
         code = sanitizar_input(code)
         produto = db.buscar_produto_por_codigo(code)
         if produto:
-            return jsonify(dict(produto))
+            # CORREÇÃO: Já está convertido para dict na função
+            return jsonify(produto)
         else:
             return jsonify({'erro': 'Produto não encontrado'}), 404
     except Exception as e:
@@ -561,7 +710,7 @@ def finalizar_venda():
         return jsonify({'erro': 'Ocorreu um erro interno no servidor.'}), 500
 
 # ==============================================================================
-# 12. ROTAS DE RELATÓRIOS
+# 12. ROTAS DE RELATÓRIOS E EXPORTAÇÃO - NOVAS E CORRIGIDAS
 # ==============================================================================
 @app.route('/relatorios')
 @login_required
@@ -579,6 +728,127 @@ def relatorios():
     except Exception as e:
         flash('Erro ao carregar relatórios.', 'danger')
         return render_template('relatorios.html', estoque=[], movimentacoes=[], estatisticas={})
+
+@app.route('/exportar_excel')
+@login_required
+def exportar_excel():
+    """Exportar relatórios para Excel - NOVA FUNÇÃO"""
+    try:
+        # Buscar dados
+        produtos = db.listar_produtos()
+        vendas = db.get_relatorio_vendas_detalhado()
+        
+        # Converter para DataFrame
+        df_produtos = pd.DataFrame(produtos)
+        df_vendas = pd.DataFrame(vendas)
+        
+        # Criar arquivo Excel em memória
+        output = io.BytesIO()
+        
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_produtos.to_excel(writer, sheet_name='Produtos', index=False)
+            df_vendas.to_excel(writer, sheet_name='Vendas', index=False)
+        
+        output.seek(0)
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'relatorio_loja_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        )
+        
+    except Exception as e:
+        flash(f'Erro ao exportar Excel: {str(e)}', 'error')
+        return redirect('/relatorios')
+
+@app.route('/exportar_pdf')
+@login_required
+def exportar_pdf():
+    """Exportar relatórios para PDF - NOVA FUNÇÃO"""
+    try:
+        # Buscar dados
+        produtos = db.listar_produtos()
+        vendas = db.get_relatorio_vendas_detalhado()
+        
+        # Criar PDF em memória
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        elements = []
+        
+        styles = getSampleStyleSheet()
+        
+        # Título
+        elements.append(Paragraph("Relatório da Loja - Mercadinho Kayr's", styles['Title']))
+        elements.append(Paragraph(f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
+        elements.append(Paragraph(" ", styles['Normal']))
+        
+        # Tabela de produtos
+        if produtos:
+            elements.append(Paragraph("Produtos em Estoque", styles['Heading2']))
+            data = [['ID', 'Nome', 'Preço', 'Quantidade', 'Código']]
+            for produto in produtos:
+                data.append([
+                    str(produto['id']),
+                    produto['nome'],
+                    f"R$ {produto['preco']:.2f}",
+                    str(produto['quantidade']),
+                    produto.get('codigo_barras', 'N/A')
+                ])
+            
+            table = Table(data)
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            elements.append(table)
+            elements.append(Paragraph(" ", styles['Normal']))
+        
+        # Tabela de vendas
+        if vendas:
+            elements.append(Paragraph("Histórico de Vendas", styles['Heading2']))
+            data = [['ID', 'Data', 'Produto', 'Quantidade', 'Total']]
+            for venda in vendas:
+                data.append([
+                    str(venda['id']),
+                    venda['data_venda'],
+                    venda['produto_nome'],
+                    str(venda['quantidade']),
+                    f"R$ {venda['total']:.2f}"
+                ])
+            
+            table = Table(data)
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.lightblue),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            elements.append(table)
+        
+        doc.build(elements)
+        buffer.seek(0)
+        
+        return send_file(
+            buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'relatorio_loja_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        )
+        
+    except Exception as e:
+        flash(f'Erro ao exportar PDF: {str(e)}', 'error')
+        return redirect('/relatorios')
 
 # ==============================================================================
 # 13. BLOCO DE EXECUÇÃO MELHORADO

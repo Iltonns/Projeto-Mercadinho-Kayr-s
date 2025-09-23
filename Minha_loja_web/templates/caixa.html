@@ -38,10 +38,11 @@
                                        id="busca-produto" 
                                        placeholder="Digite o nome ou código e pressione Enter..." 
                                        autofocus>
-                                <button class="btn btn-outline-primary" type="button" id="btn-scan">
-                                    <i class="fas fa-barcode"></i>
+                                <button class="btn btn-outline-primary" type="button" id="btn-buscar">
+                                    <i class="fas fa-search"></i> Buscar
                                 </button>
                             </div>
+                            <div id="resultado-busca" class="mt-2"></div>
                         </div>
                         <div class="col-md-4">
                             <label for="cliente-venda" class="form-label">
@@ -111,11 +112,11 @@
                             <i class="fas fa-money-bill-wave me-1"></i>Forma de Pagamento
                         </label>
                         <select class="form-select" id="forma-pagamento">
-                            <option value="dinheiro">💵 Dinheiro</option>
-                            <option value="cartao_debito">💳 Cartão de Débito</option>
-                            <option value="cartao_credito">💳 Cartão de Crédito</option>
-                            <option value="pix">📱 PIX</option>
-                            <option value="transferencia">🏦 Transferência</option>
+                            <option value="Dinheiro">💵 Dinheiro</option>
+                            <option value="Cartão Débito">💳 Cartão de Débito</option>
+                            <option value="Cartão Crédito">💳 Cartão de Crédito</option>
+                            <option value="PIX">📱 PIX</option>
+                            <option value="Transferência">🏦 Transferência</option>
                         </select>
                     </div>
 
@@ -193,249 +194,359 @@
 {% endblock %}
 
 {% block scripts %}
-    <script>
-    // Variáveis globais
-    let carrinho = [];
-    let totalVenda = 0;
+<script>
+// Variáveis globais
+let carrinho = [];
+let totalVenda = 0;
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', function() {
+    inicializarCaixa();
+});
+
+function inicializarCaixa() {
+    // Configurar busca de produtos - CORREÇÃO 1: Busca via POST
+    const buscaInput = document.getElementById('busca-produto');
+    const btnBuscar = document.getElementById('btn-buscar');
     
-    // Inicialização
-    document.addEventListener('DOMContentLoaded', function() {
-        inicializarCaixa();
+    buscaInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            buscarEAdicionarProduto(this.value);
+        }
     });
     
-    function inicializarCaixa() {
-        // Configurar busca de produtos
-        const buscaInput = document.getElementById('busca-produto');
-        buscaInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                buscarEAdicionarProduto(this.value);
-                this.value = '';
-            }
-        });
+    btnBuscar.addEventListener('click', function() {
+        buscarEAdicionarProduto(buscaInput.value);
+    });
+
+    // Event listeners para pagamento
+    const formaPagamento = document.getElementById('forma-pagamento');
+    formaPagamento.addEventListener('change', atualizarCamposPagamento);
     
-        // ... (resto dos seus event listeners que não mudam)
-        const formaPagamento = document.getElementById('forma-pagamento');
-        formaPagamento.addEventListener('change', atualizarCamposPagamento);
-        const valorPago = document.getElementById('valor-pago');
-        valorPago.addEventListener('input', calcularTroco);
-        document.getElementById('btn-finalizar-venda').addEventListener('click', finalizarVenda);
-        document.getElementById('btn-cancelar-venda').addEventListener('click', cancelarVenda);
-        document.getElementById('btn-nova-venda').addEventListener('click', novaVenda);
-        atualizarCamposPagamento();
+    const valorPago = document.getElementById('valor-pago');
+    valorPago.addEventListener('input', calcularTroco);
+    
+    document.getElementById('btn-finalizar-venda').addEventListener('click', finalizarVenda);
+    document.getElementById('btn-cancelar-venda').addEventListener('click', cancelarVenda);
+    document.getElementById('btn-nova-venda').addEventListener('click', novaVenda);
+    
+    atualizarCamposPagamento();
+}
+
+// CORREÇÃO 1: Busca de produtos via POST (nova rota)
+function buscarEAdicionarProduto(termo) {
+    if (!termo.trim()) {
+        mostrarNotificacao('Digite um código ou nome do produto', 'warning');
+        return;
     }
-    
-    function buscarEAdicionarProduto(termo) {
-        if (!termo.trim()) return;
-    
-        // APLICAÇÃO DA CORREÇÃO 1
-        fetch(`/api/buscar_produto/${encodeURIComponent(termo)}`, { credentials: 'same-origin' })
-            .then(response => {
-                if (!response.ok) { // Adiciona verificação de erro de rede
-                    throw new Error(`Erro de rede: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(produto => {
-                if (produto.erro) {
-                    mostrarNotificacao('Produto não encontrado!', 'danger');
-                    return;
-                }
-    
-                const itemExistente = carrinho.find(item => item.id === produto.id);
-                
-                if (itemExistente) {
-                    itemExistente.quantidade += 1;
-                    mostrarNotificacao(`Quantidade de ${produto.nome} aumentada!`, 'info');
-                } else {
-                    carrinho.push({
-                        id: produto.id,
-                        nome: produto.nome,
-                        preco: produto.preco,
-                        quantidade: 1,
-                        estoque: produto.quantidade
-                    });
-                    mostrarNotificacao(`${produto.nome} adicionado ao carrinho!`, 'success');
-                }
-    
-                atualizarCarrinho();
-            })
-            .catch(error => {
-                console.error('Erro ao buscar produto:', error);
-                mostrarNotificacao('Erro de comunicação ao buscar produto!', 'danger');
-            });
-    }
-    
-    // ... (A função atualizarCarrinho e outras funções auxiliares não precisam de alteração)
-    function atualizarCarrinho() {
-        const tbody = document.getElementById('carrinho-itens');
-        const carrinhoVazio = document.getElementById('carrinho-vazio');
-        const totalElement = document.getElementById('valor-total');
-        const totalItensElement = document.getElementById('total-itens');
-        const btnFinalizar = document.getElementById('btn-finalizar-venda');
-    
-        totalVenda = carrinho.reduce((total, item) => total + (item.preco * item.quantidade), 0);
-    
-        if (carrinho.length === 0) {
-            tbody.innerHTML = '<tr id="carrinho-vazio"><td colspan="5" class="text-center py-4"><i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i><p class="text-muted">Carrinho vazio</p></td></tr>';
-            btnFinalizar.disabled = true;
+
+    // Usando a nova rota POST corrigida
+    fetch('/buscar_produto_caixa', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ codigo: termo })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Erro na busca');
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            const produto = data.produto;
+            adicionarProdutoAoCarrinho(produto);
         } else {
-            tbody.innerHTML = carrinho.map((item, index) => `
-                <tr>
-                    <td>
-                        <strong>${item.nome}</strong>
-                        ${item.quantidade > item.estoque ? '<span class="badge bg-danger ms-2">Estoque insuficiente</span>' : ''}
-                    </td>
-                    <td>R$ ${item.preco.toFixed(2)}</td>
-                    <td>
-                        <div class="input-group input-group-sm">
-                            <button class="btn btn-outline-secondary" onclick="alterarQuantidade(${index}, -1)">-</button>
-                            <input type="number" class="form-control text-center" value="${item.quantidade}" 
-                                   onchange="alterarQuantidadeInput(${index}, this.value)" min="1" max="${item.estoque}">
-                            <button class="btn btn-outline-secondary" onclick="alterarQuantidade(${index}, 1)">+</button>
-                        </div>
-                    </td>
-                    <td class="fw-bold">R$ ${(item.preco * item.quantidade).toFixed(2)}</td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-danger" onclick="removerItem(${index})">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                </tr>
-            `).join('');
-            btnFinalizar.disabled = carrinho.some(item => item.quantidade > item.estoque);
+            mostrarNotificacao(data.message || 'Produto não encontrado', 'danger');
+            document.getElementById('resultado-busca').innerHTML = 
+                `<div class="alert alert-warning">${data.message}</div>`;
         }
+    })
+    .catch(error => {
+        console.error('Erro ao buscar produto:', error);
+        mostrarNotificacao('Erro de comunicação com o servidor', 'danger');
+    });
+}
+
+function adicionarProdutoAoCarrinho(produto) {
+    const itemExistente = carrinho.find(item => item.id === produto.id);
     
-        totalElement.textContent = totalVenda.toFixed(2);
-        totalItensElement.textContent = carrinho.reduce((total, item) => total + item.quantidade, 0);
-        document.getElementById('resumo-itens').textContent = carrinho.reduce((total, item) => total + item.quantidade, 0);
-        document.getElementById('resumo-total').textContent = totalVenda.toFixed(2);
-        document.getElementById('valor-a-receber').textContent = totalVenda.toFixed(2);
-        calcularTroco();
-    }
-    
-    function finalizarVenda() {
-        const formaPagamento = document.getElementById('forma-pagamento').value;
-        const clienteId = document.getElementById('cliente-venda').value || null;
-        const valorPago = parseFloat(document.getElementById('valor-pago').value) || totalVenda;
-    
-        const dadosVenda = {
-            itens: carrinho,
-            cliente_id: clienteId,
-            forma_pagamento: formaPagamento,
-            valor_pago: valorPago,
-            troco: formaPagamento === 'dinheiro' ? (valorPago - totalVenda) : 0
-        };
-    
-        // APLICAÇÃO DA CORREÇÃO 2
-        fetch('/caixa/finalizar', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(dadosVenda),
-            credentials: 'same-origin'
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.erro) {
-                mostrarNotificacao(data.erro, 'danger');
-            } else {
-                document.getElementById('numero-venda').textContent = '#' + data.venda_id;
-                new bootstrap.Modal(document.getElementById('modalConfirmacao')).show();
-                novaVenda(); // Assumindo que esta função limpa o caixa para uma nova venda
-            }
-        })
-        .catch(error => {
-            console.error('Erro ao finalizar venda:', error);
-            mostrarNotificacao('Erro ao finalizar venda!', 'danger');
-        });
-    }
-    
-    // Implemente as outras funções (novaVenda, cancelarVenda, alterarQuantidade, etc.) aqui
-    // ...
-    function mostrarNotificacao(mensagem, tipo) {
-        const container = document.querySelector('.container-fluid');
-        if (!container) return;
-    
-        const alerta = document.createElement('div');
-        // CORREÇÃO: Usando a variável 'tipo' que foi recebida pela função
-        alerta.className = `alert alert-${tipo} alert-dismissible fade show`; 
-        alerta.style.position = 'fixed';
-        alerta.style.top = '20px';
-        alerta.style.right = '20px';
-        alerta.style.zIndex = '1050'; // Garante que a notificação apareça sobre outros elementos
-        alerta.innerHTML = `
-            ${mensagem}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        `;
-        
-        // Adiciona o alerta no início do container para ele aparecer no topo
-        document.body.appendChild(alerta);
-        
-        // Garante que a notificação possa ser fechada e removida
-        const bsAlert = new bootstrap.Alert(alerta);
-        setTimeout(() => {
-            bsAlert.close();
-        }, 3000);
-    }
-    }
-    
-    // Funções que faltavam (versões simples para garantir que não dê erro)
-    function alterarQuantidade(index, delta) {
-        if (carrinho[index]) {
-            let novaQtd = carrinho[index].quantidade + delta;
-            if (novaQtd < 1) {
-                removerItem(index);
-            } else if (novaQtd > carrinho[index].estoque) {
-                mostrarNotificacao('Quantidade excede o estoque disponível!', 'warning');
-            } else {
-                carrinho[index].quantidade = novaQtd;
-                atualizarCarrinho();
-            }
+    if (itemExistente) {
+        // Verificar se pode aumentar a quantidade
+        if (itemExistente.quantidade < produto.quantidade) {
+            itemExistente.quantidade += 1;
+            mostrarNotificacao(`Quantidade de ${produto.nome} aumentada!`, 'info');
+        } else {
+            mostrarNotificacao(`Estoque insuficiente para ${produto.nome}!`, 'warning');
+            return;
+        }
+    } else {
+        // Verificar se há estoque disponível
+        if (produto.quantidade > 0) {
+            carrinho.push({
+                id: produto.id,
+                nome: produto.nome,
+                preco: parseFloat(produto.preco),
+                quantidade: 1,
+                estoque: parseInt(produto.quantidade)
+            });
+            mostrarNotificacao(`${produto.nome} adicionado ao carrinho!`, 'success');
+        } else {
+            mostrarNotificacao(`${produto.nome} sem estoque disponível!`, 'warning');
+            return;
         }
     }
-    function alterarQuantidadeInput(index, valor) {
-        if (carrinho[index]) {
-            let novaQtd = parseInt(valor, 10);
-            if (isNaN(novaQtd) || novaQtd < 1) {
-                novaQtd = 1;
-            }
-            if (novaQtd > carrinho[index].estoque) {
-                novaQtd = carrinho[index].estoque;
-                mostrarNotificacao('Quantidade excede o estoque disponível!', 'warning');
-            }
+
+    // Limpar busca
+    document.getElementById('busca-produto').value = '';
+    document.getElementById('resultado-busca').innerHTML = '';
+    
+    atualizarCarrinho();
+}
+
+function atualizarCarrinho() {
+    const tbody = document.getElementById('carrinho-itens');
+    const carrinhoVazio = document.getElementById('carrinho-vazio');
+    const totalElement = document.getElementById('valor-total');
+    const totalItensElement = document.getElementById('total-itens');
+    const btnFinalizar = document.getElementById('btn-finalizar-venda');
+
+    totalVenda = carrinho.reduce((total, item) => total + (item.preco * item.quantidade), 0);
+
+    if (carrinho.length === 0) {
+        tbody.innerHTML = '<tr id="carrinho-vazio"><td colspan="5" class="text-center py-4"><i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i><p class="text-muted">Carrinho vazio</p></td></tr>';
+        btnFinalizar.disabled = true;
+    } else {
+        tbody.innerHTML = carrinho.map((item, index) => `
+            <tr>
+                <td>
+                    <strong>${item.nome}</strong>
+                    ${item.quantidade > item.estoque ? '<span class="badge bg-danger ms-2">Estoque insuficiente</span>' : ''}
+                </td>
+                <td>R$ ${item.preco.toFixed(2)}</td>
+                <td>
+                    <div class="input-group input-group-sm">
+                        <button class="btn btn-outline-secondary" onclick="alterarQuantidade(${index}, -1)">-</button>
+                        <input type="number" class="form-control text-center" value="${item.quantidade}" 
+                               onchange="alterarQuantidadeInput(${index}, this.value)" min="1" max="${item.estoque}">
+                        <button class="btn btn-outline-secondary" onclick="alterarQuantidade(${index}, 1)">+</button>
+                    </div>
+                    <small class="text-muted">Estoque: ${item.estoque}</small>
+                </td>
+                <td class="fw-bold">R$ ${(item.preco * item.quantidade).toFixed(2)}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removerItem(${index})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+        
+        // Habilitar/desabilitar botão finalizar baseado no estoque
+        const temEstoqueInsuficiente = carrinho.some(item => item.quantidade > item.estoque);
+        btnFinalizar.disabled = temEstoqueInsuficiente || carrinho.length === 0;
+    }
+
+    // Atualizar totais
+    totalElement.textContent = totalVenda.toFixed(2);
+    const totalItens = carrinho.reduce((total, item) => total + item.quantidade, 0);
+    totalItensElement.textContent = totalItens;
+    
+    // Atualizar resumo
+    document.getElementById('resumo-itens').textContent = totalItens;
+    document.getElementById('resumo-total').textContent = totalVenda.toFixed(2);
+    document.getElementById('resumo-pagamento').textContent = document.getElementById('forma-pagamento').options[document.getElementById('forma-pagamento').selectedIndex].text;
+    document.getElementById('valor-a-receber').textContent = totalVenda.toFixed(2);
+    
+    calcularTroco();
+}
+
+// CORREÇÃO 2: Finalização de venda corrigida
+function finalizarVenda() {
+    if (carrinho.length === 0) {
+        mostrarNotificacao('Carrinho vazio! Adicione produtos antes de finalizar.', 'warning');
+        return;
+    }
+
+    // Verificar estoque novamente antes de finalizar
+    const semEstoque = carrinho.some(item => item.quantidade > item.estoque);
+    if (semEstoque) {
+        mostrarNotificacao('Alguns produtos têm quantidade maior que o estoque!', 'danger');
+        return;
+    }
+
+    const formaPagamento = document.getElementById('forma-pagamento').value;
+    const clienteId = document.getElementById('cliente-venda').value || null;
+    const valorPago = parseFloat(document.getElementById('valor-pago').value) || totalVenda;
+
+    // Validar pagamento em dinheiro
+    if (formaPagamento === 'Dinheiro' && valorPago < totalVenda) {
+        mostrarNotificacao('Valor pago é menor que o total da venda!', 'danger');
+        return;
+    }
+
+    const dadosVenda = {
+        itens: carrinho.map(item => ({
+            id: item.id,
+            qtd: item.quantidade
+        })),
+        cliente_id: clienteId,
+        forma_pagamento: formaPagamento,
+        valor_pago: valorPago,
+        troco: formaPagamento === 'Dinheiro' ? (valorPago - totalVenda) : 0
+    };
+
+    fetch('/caixa/finalizar', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dadosVenda)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.erro) {
+            mostrarNotificacao(data.erro, 'danger');
+        } else {
+            document.getElementById('numero-venda').textContent = '#' + data.venda_id;
+            
+            // Mostrar modal de confirmação
+            const modal = new bootstrap.Modal(document.getElementById('modalConfirmacao'));
+            modal.show();
+            
+            // Configurar botão do modal
+            document.getElementById('btn-imprimir-recibo').onclick = function() {
+                imprimirRecibo(data.venda_id);
+            };
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao finalizar venda:', error);
+        mostrarNotificacao('Erro ao finalizar venda! Tente novamente.', 'danger');
+    });
+}
+
+function imprimirRecibo(vendaId) {
+    // Redirecionar para página de recibo ou abrir em nova janela
+    window.open(`/recibo/${vendaId}`, '_blank');
+}
+
+function mostrarNotificacao(mensagem, tipo) {
+    // Remover notificações anteriores
+    const notificacoesAntigas = document.querySelectorAll('.alert-notificacao');
+    notificacoesAntigas.forEach(notif => notif.remove());
+
+    const alerta = document.createElement('div');
+    alerta.className = `alert alert-${tipo} alert-dismissible fade show alert-notificacao`;
+    alerta.style.position = 'fixed';
+    alerta.style.top = '20px';
+    alerta.style.right = '20px';
+    alerta.style.zIndex = '1050';
+    alerta.style.minWidth = '300px';
+    
+    alerta.innerHTML = `
+        <i class="fas fa-${tipo === 'success' ? 'check' : tipo === 'warning' ? 'exclamation-triangle' : 'exclamation-circle'} me-2"></i>
+        ${mensagem}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alerta);
+    
+    // Auto-remover após 5 segundos
+    setTimeout(() => {
+        if (alerta.parentNode) {
+            alerta.remove();
+        }
+    }, 5000);
+}
+
+// Funções auxiliares
+function alterarQuantidade(index, delta) {
+    if (carrinho[index]) {
+        let novaQtd = carrinho[index].quantidade + delta;
+        if (novaQtd < 1) {
+            removerItem(index);
+        } else if (novaQtd > carrinho[index].estoque) {
+            mostrarNotificacao('Quantidade excede o estoque disponível!', 'warning');
+        } else {
             carrinho[index].quantidade = novaQtd;
             atualizarCarrinho();
         }
     }
-    function removerItem(index) {
-        carrinho.splice(index, 1);
-        atualizarCarrinho();
-    }
-    function novaVenda() {
-        carrinho = [];
-        totalVenda = 0;
-        document.getElementById('cliente-venda').value = '';
-        document.getElementById('forma-pagamento').value = 'dinheiro';
-        document.getElementById('valor-pago').value = '';
-        atualizarCamposPagamento();
-        atualizarCarrinho();
-    }
-    function cancelarVenda() {
-        if (confirm('Tem certeza que deseja cancelar a venda atual?')) {
-            novaVenda();
-            mostrarNotificacao('Venda cancelada.', 'info');
+}
+
+function alterarQuantidadeInput(index, valor) {
+    if (carrinho[index]) {
+        let novaQtd = parseInt(valor, 10);
+        if (isNaN(novaQtd) || novaQtd < 1) {
+            novaQtd = 1;
         }
+        if (novaQtd > carrinho[index].estoque) {
+            novaQtd = carrinho[index].estoque;
+            mostrarNotificacao('Quantidade ajustada para o máximo disponível!', 'warning');
+        }
+        carrinho[index].quantidade = novaQtd;
+        atualizarCarrinho();
     }
-    function atualizarCamposPagamento() {
-        const forma = document.getElementById('forma-pagamento').value;
-        document.getElementById('campo-dinheiro').classList.toggle('d-none', forma !== 'dinheiro');
-        document.getElementById('campo-outros').classList.toggle('d-none', forma === 'dinheiro');
+}
+
+function removerItem(index) {
+    const produtoNome = carrinho[index].nome;
+    carrinho.splice(index, 1);
+    mostrarNotificacao(`${produtoNome} removido do carrinho!`, 'info');
+    atualizarCarrinho();
+}
+
+function novaVenda() {
+    if (carrinho.length > 0 && !confirm('Tem certeza que deseja iniciar uma nova venda? O carrinho atual será perdido.')) {
+        return;
     }
-    function calcularTroco() {
-        const valorPago = parseFloat(document.getElementById('valor-pago').value) || 0;
-        const troco = valorPago - totalVenda;
-        document.getElementById('valor-troco').textContent = troco > 0 ? troco.toFixed(2) : '0.00';
+    
+    carrinho = [];
+    totalVenda = 0;
+    document.getElementById('cliente-venda').value = '';
+    document.getElementById('forma-pagamento').value = 'Dinheiro';
+    document.getElementById('valor-pago').value = '';
+    document.getElementById('busca-produto').value = '';
+    document.getElementById('resultado-busca').innerHTML = '';
+    
+    atualizarCamposPagamento();
+    atualizarCarrinho();
+    
+    mostrarNotificacao('Nova venda iniciada!', 'success');
+}
+
+function cancelarVenda() {
+    if (carrinho.length === 0) {
+        mostrarNotificacao('Não há venda para cancelar!', 'info');
+        return;
     }
-    </script>
-    {% endblock %}
+    
+    if (confirm('Tem certeza que deseja cancelar a venda atual?')) {
+        novaVenda();
+    }
+}
+
+function atualizarCamposPagamento() {
+    const forma = document.getElementById('forma-pagamento').value;
+    const isDinheiro = forma === 'Dinheiro';
+    
+    document.getElementById('campo-dinheiro').classList.toggle('d-none', !isDinheiro);
+    document.getElementById('campo-outros').classList.toggle('d-none', isDinheiro);
+    
+    if (!isDinheiro) {
+        document.getElementById('valor-pago').value = totalVenda.toFixed(2);
+    }
+    
+    document.getElementById('resumo-pagamento').textContent = document.getElementById('forma-pagamento').options[document.getElementById('forma-pagamento').selectedIndex].text;
+}
+
+function calcularTroco() {
+    const valorPago = parseFloat(document.getElementById('valor-pago').value) || 0;
+    const troco = Math.max(0, valorPago - totalVenda);
+    document.getElementById('valor-troco').textContent = troco.toFixed(2);
+}
+</script>
+{% endblock %}

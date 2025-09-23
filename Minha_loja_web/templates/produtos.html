@@ -14,31 +14,44 @@
         </div>
     </div>
 
-    <!-- Search Bar -->
+    <!-- Search Bar - CORRIGIDA -->
     <div class="row mb-4">
         <div class="col-md-6">
             <div class="input-group">
-                <input type="text" class="form-control" placeholder="Buscar produtos...">
-                <button class="btn btn-outline-primary" type="button">
-                    <i class="fas fa-search"></i>
+                <input type="text" class="form-control" id="busca-produto-estoque" 
+                       placeholder="Buscar por nome ou código de barras...">
+                <button class="btn btn-outline-primary" type="button" id="btn-buscar-estoque">
+                    <i class="fas fa-search"></i> Buscar
                 </button>
             </div>
+            <div id="resultado-busca-estoque" class="mt-2"></div>
         </div>
         <div class="col-md-6 text-end">
-            <div class="btn-group">
-                <button class="btn btn-outline-primary active">Todos</button>
-                <button class="btn btn-outline-success">Em Estoque</button>
-                <button class="btn btn-outline-danger">Sem Estoque</button>
+            <div class="btn-group" id="filtros-estoque">
+                <button class="btn btn-outline-primary active" data-filtro="todos">Todos</button>
+                <button class="btn btn-outline-success" data-filtro="com-estoque">Em Estoque</button>
+                <button class="btn btn-outline-danger" data-filtro="sem-estoque">Sem Estoque</button>
             </div>
         </div>
     </div>
 
     <!-- Products Table -->
     <div class="card">
+        <div class="card-header bg-light">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-list me-2"></i>Lista de Produtos
+                    <span class="badge bg-primary ms-2" id="total-produtos">{{ produtos|length }}</span>
+                </h5>
+                <button class="btn btn-sm btn-outline-secondary" id="btn-recargar">
+                    <i class="fas fa-sync-alt"></i> Recarregar
+                </button>
+            </div>
+        </div>
         <div class="card-body">
             {% if produtos %}
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover" id="tabela-produtos">
                     <thead class="table-light">
                         <tr>
                             <th>Nome</th>
@@ -49,9 +62,10 @@
                             <th>Ações</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="corpo-tabela">
                         {% for produto in produtos %}
-                        <tr>
+                        <tr class="produto-item" data-estoque="{{ produto.quantidade }}" 
+                            data-nome="{{ produto.nome|lower }}" data-codigo="{{ produto.codigo_barras|default('', true)|lower }}">
                             <td>
                                 <div class="d-flex align-items-center">
                                     <div class="bg-primary rounded-circle text-white p-2 me-3">
@@ -95,6 +109,11 @@
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </form>
+                                    <button class="btn btn-sm btn-outline-info btn-info-rapido" 
+                                            data-produto-id="{{ produto.id }}"
+                                            data-bs-toggle="tooltip" title="Informações Rápidas">
+                                        <i class="fas fa-info"></i>
+                                    </button>
                                 </div>
                             </td>
                         </tr>
@@ -115,16 +134,335 @@
         </div>
     </div>
 </div>
+
+<!-- Modal de Informações Rápidas -->
+<div class="modal fade" id="modalInfoProduto" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-info-circle me-2"></i>Informações do Produto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="info-produto-conteudo">
+                <!-- Conteúdo carregado via JavaScript -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <a href="#" class="btn btn-primary" id="btn-editar-produto">Editar Produto</a>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// Ativar tooltips
+// Variáveis globais
+let todosProdutos = [];
+
+// Inicialização
 document.addEventListener('DOMContentLoaded', function() {
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl)
-    })
+    inicializarEstoque();
 });
+
+function inicializarEstoque() {
+    // Armazenar todos os produtos para filtragem local
+    todosProdutos = Array.from(document.querySelectorAll('.produto-item'));
+    
+    // Configurar busca
+    const buscaInput = document.getElementById('busca-produto-estoque');
+    const btnBuscar = document.getElementById('btn-buscar-estoque');
+    
+    buscaInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            buscarProdutoEstoque(this.value);
+        }
+    });
+    
+    btnBuscar.addEventListener('click', function() {
+        buscarProdutoEstoque(buscaInput.value);
+    });
+
+    // Configurar filtros
+    document.querySelectorAll('#filtros-estoque button').forEach(btn => {
+        btn.addEventListener('click', function() {
+            // Ativar botão clicado
+            document.querySelectorAll('#filtros-estoque button').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            
+            const filtro = this.getAttribute('data-filtro');
+            aplicarFiltroEstoque(filtro);
+        });
+    });
+
+    // Configurar botão recarregar
+    document.getElementById('btn-recargar').addEventListener('click', function() {
+        location.reload();
+    });
+
+    // Configurar botões de informação rápida
+    document.querySelectorAll('.btn-info-rapido').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const produtoId = this.getAttribute('data-produto-id');
+            carregarInfoProduto(produtoId);
+        });
+    });
+
+    // Ativar tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+}
+
+// CORREÇÃO: Busca de produtos no estoque
+function buscarProdutoEstoque(termo) {
+    if (!termo.trim()) {
+        // Se busca vazia, mostrar todos os produtos
+        mostrarTodosProdutos();
+        document.getElementById('resultado-busca-estoque').innerHTML = '';
+        return;
+    }
+
+    // Busca via API (igual ao caixa)
+    fetch('/buscar_produto_estoque', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ codigo: termo })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Erro na busca');
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            // Destacar produto encontrado
+            destacarProdutoEncontrado(data.produto.id);
+            document.getElementById('resultado-busca-estoque').innerHTML = 
+                `<div class="alert alert-success">Produto encontrado: <strong>${data.produto.nome}</strong></div>`;
+        } else {
+            document.getElementById('resultado-busca-estoque').innerHTML = 
+                `<div class="alert alert-warning">${data.message}</div>`;
+            // Tentar busca local
+            buscarLocalmente(termo);
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao buscar produto:', error);
+        document.getElementById('resultado-busca-estoque').innerHTML = 
+            '<div class="alert alert-danger">Erro na busca. Tentando busca local...</div>';
+        buscarLocalmente(termo);
+    });
+}
+
+function buscarLocalmente(termo) {
+    const termoLower = termo.toLowerCase();
+    let encontrados = 0;
+    
+    todosProdutos.forEach(produto => {
+        const nome = produto.getAttribute('data-nome');
+        const codigo = produto.getAttribute('data-codigo');
+        
+        if (nome.includes(termoLower) || codigo.includes(termoLower)) {
+            produto.style.display = '';
+            encontrados++;
+        } else {
+            produto.style.display = 'none';
+        }
+    });
+    
+    document.getElementById('total-produtos').textContent = encontrados;
+    
+    if (encontrados === 0) {
+        document.getElementById('resultado-busca-estoque').innerHTML += 
+            '<div class="alert alert-info mt-2">Nenhum produto encontrado localmente.</div>';
+    } else {
+        document.getElementById('resultado-busca-estoque').innerHTML += 
+            `<div class="alert alert-info mt-2">Encontrados ${encontrados} produto(s) localmente.</div>`;
+    }
+}
+
+function destacarProdutoEncontrado(produtoId) {
+    // Ocultar todos os produtos
+    todosProdutos.forEach(produto => {
+        produto.style.display = 'none';
+    });
+    
+    // Mostrar apenas o produto encontrado
+    const produtoEncontrado = document.querySelector(`.produto-item[data-produto-id="${produtoId}"]`);
+    if (produtoEncontrado) {
+        produtoEncontrado.style.display = '';
+        produtoEncontrado.classList.add('table-success');
+        
+        // Scroll para o produto
+        produtoEncontrado.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        document.getElementById('total-produtos').textContent = 1;
+    }
+}
+
+function mostrarTodosProdutos() {
+    todosProdutos.forEach(produto => {
+        produto.style.display = '';
+        produto.classList.remove('table-success');
+    });
+    document.getElementById('total-produtos').textContent = todosProdutos.length;
+}
+
+function aplicarFiltroEstoque(filtro) {
+    let visiveis = 0;
+    
+    todosProdutos.forEach(produto => {
+        const estoque = parseInt(produto.getAttribute('data-estoque'));
+        
+        switch(filtro) {
+            case 'com-estoque':
+                produto.style.display = estoque > 0 ? '' : 'none';
+                break;
+            case 'sem-estoque':
+                produto.style.display = estoque === 0 ? '' : 'none';
+                break;
+            default: // 'todos'
+                produto.style.display = '';
+                break;
+        }
+        
+        if (produto.style.display !== 'none') {
+            visiveis++;
+        }
+    });
+    
+    document.getElementById('total-produtos').textContent = visiveis;
+}
+
+function carregarInfoProduto(produtoId) {
+    // Buscar informações detalhadas do produto
+    fetch(`/api/buscar_produto/${produtoId}`)
+    .then(response => response.json())
+    .then(produto => {
+        if (produto.erro) {
+            document.getElementById('info-produto-conteudo').innerHTML = 
+                '<div class="alert alert-danger">Erro ao carregar informações do produto.</div>';
+        } else {
+            document.getElementById('info-produto-conteudo').innerHTML = `
+                <div class="row">
+                    <div class="col-12">
+                        <h6>${produto.nome}</h6>
+                        <hr>
+                        <p><strong>ID:</strong> ${produto.id}</p>
+                        <p><strong>Preço:</strong> R$ ${parseFloat(produto.preco).toFixed(2)}</p>
+                        <p><strong>Estoque:</strong> ${produto.quantidade} unidades</p>
+                        <p><strong>Código Barras:</strong> ${produto.codigo_barras || 'N/A'}</p>
+                        ${produto.data_criacao ? `<p><strong>Cadastrado em:</strong> ${new Date(produto.data_criacao).toLocaleDateString()}</p>` : ''}
+                    </div>
+                </div>
+            `;
+            
+            // Configurar link de edição
+            document.getElementById('btn-editar-produto').href = `/produtos/editar/${produtoId}`;
+            
+            // Mostrar modal
+            new bootstrap.Modal(document.getElementById('modalInfoProduto')).show();
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        document.getElementById('info-produto-conteudo').innerHTML = 
+            '<div class="alert alert-danger">Erro ao carregar informações.</div>';
+    });
+}
+
+// Função para atualizar estoque rapidamente (opcional)
+function atualizarEstoqueRapido(produtoId, novaQuantidade) {
+    if (!confirm('Tem certeza que deseja atualizar o estoque?')) return;
+    
+    fetch('/atualizar_quantidade', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            produto_id: produtoId,
+            quantidade: novaQuantidade
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            mostrarNotificacao('Estoque atualizado com sucesso!', 'success');
+            location.reload(); // Recarregar para mostrar dados atualizados
+        } else {
+            mostrarNotificacao('Erro ao atualizar estoque: ' + data.message, 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        mostrarNotificacao('Erro de comunicação com o servidor', 'danger');
+    });
+}
+
+function mostrarNotificacao(mensagem, tipo) {
+    // Remover notificações anteriores
+    const notificacoesAntigas = document.querySelectorAll('.alert-notificacao');
+    notificacoesAntigas.forEach(notif => notif.remove());
+
+    const alerta = document.createElement('div');
+    alerta.className = `alert alert-${tipo} alert-dismissible fade show alert-notificacao`;
+    alerta.style.position = 'fixed';
+    alerta.style.top = '20px';
+    alerta.style.right = '20px';
+    alerta.style.zIndex = '1050';
+    alerta.style.minWidth = '300px';
+    
+    alerta.innerHTML = `
+        <i class="fas fa-${tipo === 'success' ? 'check' : tipo === 'warning' ? 'exclamation-triangle' : 'exclamation-circle'} me-2"></i>
+        ${mensagem}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alerta);
+    
+    // Auto-remover após 5 segundos
+    setTimeout(() => {
+        if (alerta.parentNode) {
+            alerta.remove();
+        }
+    }, 5000);
+}
 </script>
+
+<style>
+.produto-item {
+    transition: all 0.3s ease;
+}
+
+.produto-item:hover {
+    background-color: #f8f9fa;
+    transform: translateY(-1px);
+}
+
+.table-success {
+    background-color: #d1edff !important;
+    border-left: 4px solid #0d6efd;
+}
+
+.alert-notificacao {
+    animation: slideInRight 0.3s ease;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+</style>
 {% endblock %}

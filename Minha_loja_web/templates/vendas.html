@@ -11,8 +11,8 @@
                     <a href="{{ url_for('caixa') }}" class="btn btn-primary me-2">
                         <i class="fas fa-cash-register me-2"></i>Ir para Caixa
                     </a>
-                    <button class="btn btn-outline-primary" id="btn-exportar">
-                        <i class="fas fa-download me-2"></i>Exportar
+                    <button class="btn btn-outline-success" id="btn-exportar-excel">
+                        <i class="fas fa-file-excel me-2"></i>Exportar Excel
                     </button>
                 </div>
             </div>
@@ -71,7 +71,7 @@
                     <div class="card bg-success text-white">
                         <div class="card-body text-center py-3">
                             <i class="fas fa-dollar-sign fa-2x mb-2"></i>
-                            <h5>R$ {{ "%.2f"|format(vendas|sum(attribute='total')) }}</h5>
+                            <h5>R$ {{ "%.2f"|format(vendas|sum(attribute='total') if vendas else 0) }}</h5>
                             <small>Valor Total</small>
                         </div>
                     </div>
@@ -91,8 +91,10 @@
                             <th width="10%">ID Venda</th>
                             <th width="15%">Data/Hora</th>
                             <th width="20%">Cliente</th>
-                            <th width="35%">Produtos</th>
+                            <th width="25%">Produto</th>
+                            <th width="10%">Quantidade</th>
                             <th width="10%">Total</th>
+                            <th width="10%">Pagamento</th>
                             <th width="10%">Ações</th>
                         </tr>
                     </thead>
@@ -104,8 +106,8 @@
                             </td>
                             <td>
                                 <div class="d-flex flex-column">
-                                    <small class="text-muted">{{ venda.data_venda.split(' ')[0] }}</small>
-                                    <small>{{ venda.data_venda.split(' ')[1] }}</small>
+                                    <small class="text-muted">{{ venda.data_venda.split(' ')[0] if venda.data_venda else 'N/A' }}</small>
+                                    <small>{{ venda.data_venda.split(' ')[1] if venda.data_venda and ' ' in venda.data_venda else '' }}</small>
                                 </div>
                             </td>
                             <td>
@@ -119,15 +121,16 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <div class="produtos-lista">
-                                    {% set produtos_lista = venda.produtos.split('; ') %}
-                                    {% for produto in produtos_lista %}
-                                    <span class="badge bg-light text-dark me-1 mb-1">{{ produto }}</span>
-                                    {% endfor %}
-                                </div>
+                                <span class="fw-bold">{{ venda.produto_nome or 'N/A' }}</span>
                             </td>
                             <td>
-                                <span class="fw-bold text-success">R$ {{ "%.2f"|format(venda.total) }}</span>
+                                <span class="badge bg-info">{{ venda.quantidade or 0 }} un</span>
+                            </td>
+                            <td>
+                                <span class="fw-bold text-success">R$ {{ "%.2f"|format(venda.total or 0) }}</span>
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{{ venda.forma_pagamento or 'N/A' }}</span>
                             </td>
                             <td>
                                 <div class="btn-group">
@@ -148,6 +151,13 @@
                         </tr>
                         {% endfor %}
                     </tbody>
+                    <tfoot class="table-dark">
+                        <tr>
+                            <td colspan="5" class="text-end"><strong>Total Geral:</strong></td>
+                            <td class="fw-bold text-warning">R$ {{ "%.2f"|format(vendas|sum(attribute='total') if vendas else 0) }}</td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
 
@@ -194,46 +204,73 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <strong>Data:</strong> <span id="venda-data"></span>
+                <div id="carregando-detalhes" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Carregando...</span>
                     </div>
-                    <div class="col-md-6">
-                        <strong>Cliente:</strong> <span id="venda-cliente"></span>
+                    <p class="mt-2">Carregando detalhes da venda...</p>
+                </div>
+                <div id="conteudo-detalhes" style="display: none;">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Data:</strong> <span id="venda-data"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Cliente:</strong> <span id="venda-cliente"></span>
+                        </div>
+                    </div>
+                    
+                    <h6>Produtos Vendidos</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm" id="tabela-detalhes">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Produto</th>
+                                    <th>Quantidade</th>
+                                    <th>Preço Unit.</th>
+                                    <th>Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Detalhes serão preenchidos via JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <strong>Forma de Pagamento:</strong> <span id="venda-pagamento"></span>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <h5>Total: R$ <span id="venda-total" class="text-success"></span></h5>
+                        </div>
                     </div>
                 </div>
-                
-                <h6>Produtos Vendidos</h6>
-                <div class="table-responsive">
-                    <table class="table table-sm" id="tabela-detalhes">
-                        <thead>
-                            <tr>
-                                <th>Produto</th>
-                                <th>Quantidade</th>
-                                <th>Preço Unit.</th>
-                                <th>Subtotal</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Detalhes serão preenchidos via JavaScript -->
-                        </tbody>
-                    </table>
-                </div>
-                
-                <div class="row mt-3">
-                    <div class="col-md-6">
-                        <strong>Forma de Pagamento:</strong> <span id="venda-pagamento"></span>
-                    </div>
-                    <div class="col-md-6 text-end">
-                        <h5>Total: R$ <span id="venda-total" class="text-success"></span></h5>
-                    </div>
+                <div id="erro-detalhes" class="alert alert-danger text-center" style="display: none;">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <span id="mensagem-erro">Erro ao carregar detalhes da venda.</span>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-                <button type="button" class="btn btn-primary" onclick="imprimirReciboModal()">
+                <button type="button" class="btn btn-primary" onclick="imprimirReciboModal()" id="btn-imprimir-modal">
                     <i class="fas fa-print me-2"></i>Imprimir Recibo
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Carregamento -->
+<div class="modal fade" id="modalCarregamento" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-body text-center py-4">
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Carregando...</span>
+                </div>
+                <h6>Exportando Vendas</h6>
+                <p class="text-muted mb-0">Preparando arquivo Excel...</p>
             </div>
         </div>
     </div>
@@ -242,6 +279,7 @@
 
 {% block scripts %}
 <script>
+// CORREÇÃO: Vendas funcionais com dados reais
 document.addEventListener('DOMContentLoaded', function() {
     // Inicializar tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
@@ -260,7 +298,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Event listeners para filtros
     document.getElementById('btn-filtrar').addEventListener('click', aplicarFiltros);
     document.getElementById('btn-limpar-filtros').addEventListener('click', limparFiltros);
-    document.getElementById('btn-exportar').addEventListener('click', exportarVendas);
+    document.getElementById('btn-exportar-excel').addEventListener('click', exportarVendasExcel);
 });
 
 function aplicarFiltros() {
@@ -269,57 +307,76 @@ function aplicarFiltros() {
     const clienteId = document.getElementById('filtro-cliente').value;
 
     // Aqui você implementaria a lógica de filtro via AJAX
-    // Por enquanto, apenas mostra mensagem
-    mostrarNotificacao('Filtros aplicados com sucesso!', 'info');
+    mostrarNotificacao('Filtros aplicados! (Funcionalidade em desenvolvimento)', 'info');
 }
 
 function limparFiltros() {
-    document.getElementById('data-inicio').value = '';
-    document.getElementById('data-fim').value = '';
+    const hoje = new Date();
+    const trintaDiasAtras = new Date();
+    trintaDiasAtras.setDate(hoje.getDate() - 30);
+
+    document.getElementById('data-inicio').value = trintaDiasAtras.toISOString().split('T')[0];
+    document.getElementById('data-fim').value = hoje.toISOString().split('T')[0];
     document.getElementById('filtro-cliente').value = '';
-    mostrarNotificacao('Filtros limpos!', 'info');
+    
+    mostrarNotificacao('Filtros restaurados para os últimos 30 dias!', 'info');
 }
 
+// CORREÇÃO: Buscar detalhes reais da venda via API
 function verDetalhesVenda(vendaId) {
-    // Simulação de dados - na implementação real, faria uma requisição AJAX
-    const vendaSimulada = {
-        id: vendaId,
-        data: '2024-01-15 14:30:00',
-        cliente: 'Cliente Exemplo',
-        produtos: [
-            { nome: 'Arroz', quantidade: 2, preco: 25.00 },
-            { nome: 'Feijão', quantidade: 1, preco: 8.50 },
-            { nome: 'Óleo', quantidade: 1, preco: 7.00 }
-        ],
-        formaPagamento: 'Dinheiro',
-        total: 65.50
-    };
+    // Mostrar modal e carregamento
+    const modal = new bootstrap.Modal(document.getElementById('modalDetalhesVenda'));
+    modal.show();
+    
+    document.getElementById('carregando-detalhes').style.display = 'block';
+    document.getElementById('conteudo-detalhes').style.display = 'none';
+    document.getElementById('erro-detalhes').style.display = 'none';
+    document.getElementById('btn-imprimir-modal').disabled = true;
 
-    // Preencher modal
-    document.getElementById('venda-id').textContent = vendaId;
-    document.getElementById('venda-data').textContent = vendaSimulada.data;
-    document.getElementById('venda-cliente').textContent = vendaSimulada.cliente;
-    document.getElementById('venda-pagamento').textContent = vendaSimulada.formaPagamento;
-    document.getElementById('venda-total').textContent = vendaSimulada.total.toFixed(2);
+    // Buscar detalhes da venda
+    fetch(`/api/detalhes_venda/${vendaId}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Venda não encontrada');
+            }
+            return response.json();
+        })
+        .then(venda => {
+            // Preencher modal com dados reais
+            document.getElementById('venda-id').textContent = vendaId;
+            document.getElementById('venda-data').textContent = venda.data_venda || 'N/A';
+            document.getElementById('venda-cliente').textContent = venda.cliente_nome || 'Cliente não informado';
+            document.getElementById('venda-pagamento').textContent = venda.forma_pagamento || 'N/A';
+            document.getElementById('venda-total').textContent = (venda.total || 0).toFixed(2);
 
-    // Preencher tabela de produtos
-    const tbody = document.querySelector('#tabela-detalhes tbody');
-    tbody.innerHTML = vendaSimulada.produtos.map(produto => `
-        <tr>
-            <td>${produto.nome}</td>
-            <td>${produto.quantidade}</td>
-            <td>R$ ${produto.preco.toFixed(2)}</td>
-            <td>R$ ${(produto.quantidade * produto.preco).toFixed(2)}</td>
-        </tr>
-    `).join('');
+            // Preencher tabela de produtos (simplificado para dados atuais)
+            const tbody = document.querySelector('#tabela-detalhes tbody');
+            tbody.innerHTML = `
+                <tr>
+                    <td>${venda.produto_nome || 'N/A'}</td>
+                    <td>${venda.quantidade || 0}</td>
+                    <td>R$ ${(venda.preco_unitario || 0).toFixed(2)}</td>
+                    <td>R$ ${(venda.total || 0).toFixed(2)}</td>
+                </tr>
+            `;
 
-    // Mostrar modal
-    new bootstrap.Modal(document.getElementById('modalDetalhesVenda')).show();
+            // Mostrar conteúdo
+            document.getElementById('carregando-detalhes').style.display = 'none';
+            document.getElementById('conteudo-detalhes').style.display = 'block';
+            document.getElementById('btn-imprimir-modal').disabled = false;
+        })
+        .catch(error => {
+            console.error('Erro ao carregar detalhes:', error);
+            document.getElementById('carregando-detalhes').style.display = 'none';
+            document.getElementById('erro-detalhes').style.display = 'block';
+            document.getElementById('mensagem-erro').textContent = error.message;
+        });
 }
 
 function imprimirRecibo(vendaId) {
-    // Implementar lógica de impressão
-    mostrarNotificacao(`Preparando recibo da venda #${vendaId}...`, 'info');
+    // Abrir recibo em nova janela
+    window.open(`/recibo/${vendaId}`, '_blank');
+    mostrarNotificacao(`Abrindo recibo da venda #${vendaId}...`, 'info');
 }
 
 function imprimirReciboModal() {
@@ -328,21 +385,79 @@ function imprimirReciboModal() {
     bootstrap.Modal.getInstance(document.getElementById('modalDetalhesVenda')).hide();
 }
 
-function exportarVendas() {
-    // Implementar exportação para Excel/PDF
-    mostrarNotificacao('Exportando relatório de vendas...', 'info');
+// CORREÇÃO: Exportação funcional de vendas para Excel
+function exportarVendasExcel() {
+    mostrarModalCarregamento();
+    
+    // Usar a rota de exportação existente
+    fetch('/exportar_excel')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Erro ao gerar Excel');
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            // Criar link de download
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `vendas_loja_${new Date().toISOString().split('T')[0]}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            ocultarModalCarregamento();
+            mostrarNotificacao('Planilha de vendas exportada com sucesso!', 'success');
+        })
+        .catch(error => {
+            console.error('Erro ao exportar vendas:', error);
+            ocultarModalCarregamento();
+            mostrarNotificacao('Erro ao exportar vendas. Tente novamente.', 'danger');
+        });
+}
+
+function mostrarModalCarregamento() {
+    const modal = new bootstrap.Modal(document.getElementById('modalCarregamento'));
+    modal.show();
+}
+
+function ocultarModalCarregamento() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('modalCarregamento'));
+    if (modal) {
+        modal.hide();
+    }
 }
 
 function mostrarNotificacao(mensagem, tipo) {
+    // Remover notificações anteriores
+    const notificacoesAntigas = document.querySelectorAll('.alert-notificacao');
+    notificacoesAntigas.forEach(notif => notif.remove());
+
     const alerta = document.createElement('div');
-    alerta.className = `alert alert-${type} alert-dismissible fade show`;
+    alerta.className = `alert alert-${tipo} alert-dismissible fade show alert-notificacao`;
+    alerta.style.position = 'fixed';
+    alerta.style.top = '20px';
+    alerta.style.right = '20px';
+    alerta.style.zIndex = '1060';
+    alerta.style.minWidth = '300px';
+    
     alerta.innerHTML = `
+        <i class="fas fa-${tipo === 'success' ? 'check' : tipo === 'warning' ? 'exclamation-triangle' : 'exclamation-circle'} me-2"></i>
         ${mensagem}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     `;
-    document.querySelector('.container-fluid').prepend(alerta);
     
-    setTimeout(() => alerta.remove(), 3000);
+    document.body.appendChild(alerta);
+    
+    // Auto-remover após 5 segundos
+    setTimeout(() => {
+        if (alerta.parentNode) {
+            alerta.remove();
+        }
+    }, 5000);
 }
 </script>
 
@@ -364,6 +479,31 @@ function mostrarNotificacao(mensagem, tipo) {
 .modal-body {
     max-height: 70vh;
     overflow-y: auto;
+}
+
+.alert-notificacao {
+    animation: slideInRight 0.3s ease;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Melhorar a visualização das tabelas */
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 123, 255, 0.075);
+}
+
+/* Estilo para o modal de carregamento */
+.modal-sm {
+    max-width: 300px;
 }
 </style>
 {% endblock %}

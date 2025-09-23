@@ -8,7 +8,7 @@
             <div class="d-flex justify-content-between align-items-center">
                 <h1><i class="fas fa-chart-bar me-2"></i>Relatórios do Sistema</h1>
                 <div>
-                    <button class="btn btn-outline-primary me-2" id="btn-exportar-pdf">
+                    <button class="btn btn-outline-danger me-2" id="btn-exportar-pdf">
                         <i class="fas fa-file-pdf me-2"></i>Exportar PDF
                     </button>
                     <button class="btn btn-outline-success" id="btn-exportar-excel">
@@ -42,7 +42,6 @@
                             <select class="form-select" id="tipo-relatorio">
                                 <option value="completo">Relatório Completo</option>
                                 <option value="estoque">Apenas Estoque</option>
-                                <option value="movimentacoes">Apenas Movimentações</option>
                                 <option value="vendas">Apenas Vendas</option>
                             </select>
                         </div>
@@ -66,7 +65,7 @@
                     <div class="card bg-info text-white">
                         <div class="card-body text-center py-3">
                             <i class="fas fa-boxes fa-2x mb-2"></i>
-                            <h5>{{ estatisticas.total_produtos or estoque|length }}</h5>
+                            <h5>{{ estatisticas.total_produtos or 0 }}</h5>
                             <small>Total Produtos</small>
                         </div>
                     </div>
@@ -75,7 +74,7 @@
                     <div class="card bg-success text-white">
                         <div class="card-body text-center py-3">
                             <i class="fas fa-check-circle fa-2x mb-2"></i>
-                            <h5>{{ estatisticas.produtos_estoque or (estoque|selectattr('quantidade', 'gt', 0)|list|length) }}</h5>
+                            <h5>{{ estatisticas.produtos_estoque or 0 }}</h5>
                             <small>Em Estoque</small>
                         </div>
                     </div>
@@ -84,7 +83,7 @@
                     <div class="card bg-warning text-white">
                         <div class="card-body text-center py-3">
                             <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
-                            <h5>{{ estatisticas.produtos_sem_estoque or (estoque|selectattr('quantidade', 'le', 0)|list|length) }}</h5>
+                            <h5>{{ estatisticas.produtos_sem_estoque or 0 }}</h5>
                             <small>Sem Estoque</small>
                         </div>
                     </div>
@@ -181,7 +180,9 @@
                             <tfoot class="table-dark">
                                 <tr>
                                     <td colspan="5" class="text-end"><strong>Valor Total do Estoque:</strong></td>
-                                    <td class="fw-bold text-warning">R$ {{ "%.2f"|format(estoque|sum(attribute='preco') * estoque|sum(attribute='quantidade')) }}</td>
+                                    <td class="fw-bold text-warning">
+                                        R$ {{ "%.2f"|format(estoque|sum(attribute='preco') * estoque|sum(attribute='quantidade')) }}
+                                    </td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -273,9 +274,9 @@
                                     <th width="10%">ID Venda</th>
                                     <th width="15%">Data</th>
                                     <th width="20%">Cliente</th>
-                                    <th width="35%">Produtos</th>
-                                    <th width="10%">Total</th>
-                                    <th width="10%">Pagamento</th>
+                                    <th width="30%">Produto</th>
+                                    <th width="10%">Quantidade</th>
+                                    <th width="15%">Total</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -284,24 +285,18 @@
                                     <td><span class="badge bg-secondary">#{{ venda.id }}</span></td>
                                     <td><small>{{ venda.data_venda }}</small></td>
                                     <td>{{ venda.cliente_nome or 'Cliente não informado' }}</td>
-                                    <td>
-                                        <div class="produtos-lista">
-                                            {% set produtos_lista = venda.produtos.split('; ') %}
-                                            {% for produto in produtos_lista %}
-                                            <span class="badge bg-light text-dark me-1 mb-1">{{ produto }}</span>
-                                            {% endfor %}
-                                        </div>
-                                    </td>
+                                    <td>{{ venda.produto_nome or 'N/A' }}</td>
+                                    <td class="fw-bold">{{ venda.quantidade }} un</td>
                                     <td class="fw-bold text-success">R$ {{ "%.2f"|format(venda.total) }}</td>
-                                    <td><span class="badge bg-info">{{ venda.forma_pagamento or 'N/A' }}</span></td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                             <tfoot class="table-dark">
                                 <tr>
-                                    <td colspan="4" class="text-end"><strong>Total de Vendas:</strong></td>
-                                    <td class="fw-bold text-warning">R$ {{ "%.2f"|format(vendas|sum(attribute='total')) }}</td>
-                                    <td></td>
+                                    <td colspan="5" class="text-end"><strong>Total de Vendas:</strong></td>
+                                    <td class="fw-bold text-warning">
+                                        R$ {{ "%.2f"|format(vendas|sum(attribute='total')) }}
+                                    </td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -319,42 +314,16 @@
     </div>
 </div>
 
-<!-- Modal de Exportação -->
-<div class="modal fade" id="modalExportacao" tabindex="-1">
-    <div class="modal-dialog">
+<!-- Modal de Carregamento -->
+<div class="modal fade" id="modalCarregamento" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-sm">
         <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title"><i class="fas fa-download me-2"></i>Exportar Relatório</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle me-2"></i>
-                    Selecione o formato e o período para exportação do relatório.
+            <div class="modal-body text-center py-4">
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Carregando...</span>
                 </div>
-                <div class="mb-3">
-                    <label for="export-formato" class="form-label">Formato</label>
-                    <select class="form-select" id="export-formato">
-                        <option value="pdf">PDF (Documento)</option>
-                        <option value="excel">Excel (Planilha)</option>
-                        <option value="csv">CSV (Dados)</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label for="export-periodo" class="form-label">Período</label>
-                    <select class="form-select" id="export-periodo">
-                        <option value="hoje">Hoje</option>
-                        <option value="semana">Esta Semana</option>
-                        <option value="mes">Este Mês</option>
-                        <option value="personalizado">Personalizado</option>
-                    </select>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary" id="btn-confirmar-export">
-                    <i class="fas fa-download me-2"></i>Exportar
-                </button>
+                <h6>Gerando Relatório</h6>
+                <p class="text-muted mb-0">Aguarde enquanto preparamos seu arquivo...</p>
             </div>
         </div>
     </div>
@@ -363,18 +332,24 @@
 
 {% block scripts %}
 <script>
+// CORREÇÃO: Exportação funcional de PDF e Excel
 document.addEventListener('DOMContentLoaded', function() {
     // Configurar data atual como padrão
     const hoje = new Date().toISOString().split('T')[0];
-    document.getElementById('data-inicio').value = hoje;
-    document.getElementById('data-fim').value = hoje;
+    if (!document.getElementById('data-inicio').value) {
+        document.getElementById('data-inicio').value = hoje;
+    }
+    if (!document.getElementById('data-fim').value) {
+        document.getElementById('data-fim').value = hoje;
+    }
 
-    // Event listeners
+    // Event listeners para exportação - CORRIGIDOS
+    document.getElementById('btn-exportar-pdf').addEventListener('click', exportarPDF);
+    document.getElementById('btn-exportar-excel').addEventListener('click', exportarExcel);
+    
+    // Event listeners para filtros
     document.getElementById('btn-gerar-relatorio').addEventListener('click', gerarRelatorio);
     document.getElementById('btn-limpar-filtros').addEventListener('click', limparFiltros);
-    document.getElementById('btn-exportar-pdf').addEventListener('click', () => abrirModalExportacao('pdf'));
-    document.getElementById('btn-exportar-excel').addEventListener('click', () => abrirModalExportacao('excel'));
-    document.getElementById('btn-confirmar-export').addEventListener('click', confirmarExportacao);
 
     // Inicializar tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
@@ -382,6 +357,74 @@ document.addEventListener('DOMContentLoaded', function() {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
 });
+
+// CORREÇÃO 1: Exportação PDF funcional
+function exportarPDF() {
+    mostrarModalCarregamento();
+    
+    // Usando a rota corrigida do app.py
+    fetch('/exportar_pdf')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Erro ao gerar PDF');
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            // Criar link de download
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `relatorio_loja_${new Date().toISOString().split('T')[0]}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            ocultarModalCarregamento();
+            mostrarNotificacao('PDF exportado com sucesso!', 'success');
+        })
+        .catch(error => {
+            console.error('Erro ao exportar PDF:', error);
+            ocultarModalCarregamento();
+            mostrarNotificacao('Erro ao exportar PDF. Tente novamente.', 'danger');
+        });
+}
+
+// CORREÇÃO 2: Exportação Excel funcional
+function exportarExcel() {
+    mostrarModalCarregamento();
+    
+    // Usando a rota corrigida do app.py
+    fetch('/exportar_excel')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Erro ao gerar Excel');
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            // Criar link de download
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `relatorio_loja_${new Date().toISOString().split('T')[0]}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            ocultarModalCarregamento();
+            mostrarNotificacao('Excel exportado com sucesso!', 'success');
+        })
+        .catch(error => {
+            console.error('Erro ao exportar Excel:', error);
+            ocultarModalCarregamento();
+            mostrarNotificacao('Erro ao exportar Excel. Tente novamente.', 'danger');
+        });
+}
 
 function gerarRelatorio() {
     const dataInicio = document.getElementById('data-inicio').value;
@@ -394,44 +437,86 @@ function gerarRelatorio() {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Gerando...';
     btn.disabled = true;
 
-    // Simular processamento
+    // Simular processamento (em produção, faria uma requisição AJAX)
     setTimeout(() => {
         btn.innerHTML = originalText;
         btn.disabled = false;
         mostrarNotificacao('Relatório atualizado com sucesso!', 'success');
+        
+        // Aqui você pode adicionar uma requisição AJAX real para filtrar os dados
+        // filtrarRelatorios(dataInicio, dataFim, tipoRelatorio);
     }, 1000);
 }
 
 function limparFiltros() {
-    document.getElementById('data-inicio').value = '';
-    document.getElementById('data-fim').value = '';
+    const hoje = new Date().toISOString().split('T')[0];
+    document.getElementById('data-inicio').value = hoje;
+    document.getElementById('data-fim').value = hoje;
     document.getElementById('tipo-relatorio').value = 'completo';
-    mostrarNotificacao('Filtros limpos!', 'info');
+    mostrarNotificacao('Filtros limpos! Mostrando todos os dados.', 'info');
 }
 
-function abrirModalExportacao(formato) {
-    document.getElementById('export-formato').value = formato;
-    new bootstrap.Modal(document.getElementById('modalExportacao')).show();
+function filtrarRelatorios(dataInicio, dataFim, tipoRelatorio) {
+    // Esta função seria implementada para filtrar os dados via AJAX
+    // Por enquanto é apenas um placeholder
+    console.log('Filtrando relatórios:', { dataInicio, dataFim, tipoRelatorio });
 }
 
-function confirmarExportacao() {
-    const formato = document.getElementById('export-formato').value;
-    const periodo = document.getElementById('export-periodo').value;
-    
-    mostrarNotificacao(`Exportando relatório em ${formato.toUpperCase()} para o período: ${periodo}`, 'info');
-    bootstrap.Modal.getInstance(document.getElementById('modalExportacao')).hide();
+function mostrarModalCarregamento() {
+    const modal = new bootstrap.Modal(document.getElementById('modalCarregamento'));
+    modal.show();
+}
+
+function ocultarModalCarregamento() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('modalCarregamento'));
+    if (modal) {
+        modal.hide();
+    }
 }
 
 function mostrarNotificacao(mensagem, tipo) {
+    // Remover notificações anteriores
+    const notificacoesAntigas = document.querySelectorAll('.alert-notificacao');
+    notificacoesAntigas.forEach(notif => notif.remove());
+
     const alerta = document.createElement('div');
-    alerta.className = `alert alert-${type} alert-dismissible fade show`;
+    alerta.className = `alert alert-${tipo} alert-dismissible fade show alert-notificacao`;
+    alerta.style.position = 'fixed';
+    alerta.style.top = '20px';
+    alerta.style.right = '20px';
+    alerta.style.zIndex = '1060';
+    alerta.style.minWidth = '300px';
+    
     alerta.innerHTML = `
+        <i class="fas fa-${tipo === 'success' ? 'check' : tipo === 'warning' ? 'exclamation-triangle' : 'exclamation-circle'} me-2"></i>
         ${mensagem}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     `;
-    document.querySelector('.container-fluid').prepend(alerta);
     
-    setTimeout(() => alerta.remove(), 4000);
+    document.body.appendChild(alerta);
+    
+    // Auto-remover após 5 segundos
+    setTimeout(() => {
+        if (alerta.parentNode) {
+            alerta.remove();
+        }
+    }, 5000);
+}
+
+// Função adicional para exportar relatório específico por aba
+function exportarAbaAtual() {
+    const abaAtiva = document.querySelector('#relatoriosTabs .nav-link.active').id;
+    
+    switch(abaAtiva) {
+        case 'estoque-tab':
+            exportarExcel(); // Ou uma função específica para estoque
+            break;
+        case 'vendas-tab':
+            exportarPDF(); // Ou uma função específica para vendas
+            break;
+        default:
+            exportarPDF(); // Padrão
+    }
 }
 </script>
 
@@ -446,7 +531,7 @@ function mostrarNotificacao(mensagem, tipo) {
 }
 
 .nav-tabs .nav-link.active {
-    border-bottom: 3px solid var(--primary);
+    border-bottom: 3px solid #0d6efd;
     font-weight: 600;
 }
 
@@ -457,6 +542,31 @@ function mostrarNotificacao(mensagem, tipo) {
 
 .badge {
     font-size: 0.75em;
+}
+
+.alert-notificacao {
+    animation: slideInRight 0.3s ease;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Melhorar a visualização das tabelas */
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 123, 255, 0.075);
+}
+
+/* Estilo para o modal de carregamento */
+.modal-sm {
+    max-width: 300px;
 }
 </style>
 {% endblock %}

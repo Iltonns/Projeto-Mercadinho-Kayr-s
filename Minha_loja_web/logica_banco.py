@@ -1,4 +1,4 @@
-# Arquivo: logica_banco.py
+# Arquivo: logica_banco.py - VERSÃO CORRIGIDA
 import sqlite3
 import re
 from datetime import datetime
@@ -87,7 +87,9 @@ class DatabaseManager:
         """Busca todos os resultados com tratamento de erro"""
         try:
             self.cursor.execute(query, params)
-            return self.cursor.fetchall()
+            rows = self.cursor.fetchall()
+            # CORREÇÃO: Converter sqlite3.Row para dicionários
+            return [dict(row) for row in rows]
         except sqlite3.Error as e:
             print(f"❌ Erro ao buscar dados: {e}")
             return []
@@ -96,7 +98,9 @@ class DatabaseManager:
         """Busca um resultado com tratamento de erro"""
         try:
             self.cursor.execute(query, params)
-            return self.cursor.fetchone()
+            row = self.cursor.fetchone()
+            # CORREÇÃO: Converter sqlite3.Row para dicionário
+            return dict(row) if row else None
         except sqlite3.Error as e:
             print(f"❌ Erro ao buscar dado: {e}")
             return None
@@ -176,6 +180,16 @@ def setup_database():
             password_hash TEXT NOT NULL,
             data_criacao TEXT DEFAULT CURRENT_TIMESTAMP
         )""")
+        
+        # Inserir usuário padrão se não existir
+        usuario_existe = db.fetch_one("SELECT id FROM usuarios WHERE username = 'admin'")
+        if not usuario_existe:
+            password_hash = generate_password_hash('admin123', method='pbkdf2:sha256')
+            db.execute_query(
+                "INSERT INTO usuarios (username, password_hash) VALUES (?, ?)", 
+                ('admin', password_hash)
+            )
+            print("✅ Usuário admin criado (senha: admin123)")
         
         print("✅ Banco de dados configurado com sucesso!")
         return True
@@ -272,9 +286,9 @@ def get_user_by_username(username):
         )
     return None
 
-# --- FUNÇÕES DE PRODUTOS MELHORADAS ---
+# --- FUNÇÕES DE PRODUTOS MELHORADAS E CORRIGIDAS ---
 def listar_produtos():
-    """Lista todos os produtos com tratamento de erro"""
+    """Lista todos os produtos com tratamento de erro - CORRIGIDA"""
     db = DatabaseManager()
     
     if not db.connect():
@@ -282,7 +296,7 @@ def listar_produtos():
         
     produtos = db.fetch_all("SELECT * FROM produtos ORDER BY nome")
     db.disconnect()
-    return produtos
+    return produtos  # Já convertido para dicionários pelo DatabaseManager
 
 def adicionar_produto(nome, preco, quantidade, codigo_barras=None):
     """Adiciona produto com validações"""
@@ -340,7 +354,7 @@ def adicionar_produto(nome, preco, quantidade, codigo_barras=None):
         db.disconnect()
 
 def buscar_produto_por_id(id):
-    """Busca produto por ID"""
+    """Busca produto por ID - CORRIGIDA"""
     db = DatabaseManager()
     
     if not db.connect():
@@ -348,10 +362,10 @@ def buscar_produto_por_id(id):
         
     produto = db.fetch_one("SELECT * FROM produtos WHERE id = ?", (id,))
     db.disconnect()
-    return produto
+    return produto  # Já convertido para dicionário pelo DatabaseManager
 
 def buscar_produto_por_codigo(codigo):
-    """Busca produto por código ou nome"""
+    """Busca produto por código ou nome - CORRIGIDA"""
     codigo = sanitizar_input(codigo)
     db = DatabaseManager()
     
@@ -359,11 +373,11 @@ def buscar_produto_por_codigo(codigo):
         return None
         
     produto = db.fetch_one(
-        "SELECT * FROM produtos WHERE LOWER(codigo_barras) = LOWER(?) OR LOWER(nome) LIKE LOWER(?)", 
+        "SELECT * FROM produtos WHERE codigo_barras = ? OR nome LIKE ?", 
         (codigo, f'%{codigo}%')
     )
     db.disconnect()
-    return produto
+    return produto  # Já convertido para dicionário pelo DatabaseManager
 
 def atualizar_produto(id, nome, preco, quantidade, codigo_barras=None):
     """Atualiza produto com validações"""
@@ -436,9 +450,9 @@ def excluir_produto(id):
     finally:
         db.disconnect()
 
-# --- FUNÇÕES DE CLIENTES MELHORADAS ---
+# --- FUNÇÕES DE CLIENTES MELHORADAS E CORRIGIDAS ---
 def listar_clientes():
-    """Lista todos os clientes"""
+    """Lista todos os clientes - CORRIGIDA"""
     db = DatabaseManager()
     
     if not db.connect():
@@ -446,7 +460,7 @@ def listar_clientes():
         
     clientes = db.fetch_all("SELECT * FROM clientes ORDER BY nome")
     db.disconnect()
-    return clientes
+    return clientes  # Já convertido para dicionários pelo DatabaseManager
 
 def adicionar_cliente(nome, telefone, email):
     """Adiciona cliente com validações"""
@@ -482,7 +496,7 @@ def adicionar_cliente(nome, telefone, email):
         db.disconnect()
 
 def buscar_cliente_por_id(id):
-    """Busca cliente por ID"""
+    """Busca cliente por ID - CORRIGIDA"""
     db = DatabaseManager()
     
     if not db.connect():
@@ -490,7 +504,7 @@ def buscar_cliente_por_id(id):
         
     cliente = db.fetch_one("SELECT * FROM clientes WHERE id = ?", (id,))
     db.disconnect()
-    return cliente
+    return cliente  # Já convertido para dicionário pelo DatabaseManager
 
 def atualizar_cliente(id, nome, telefone, email):
     """Atualiza cliente com validações"""
@@ -628,34 +642,34 @@ def registrar_venda_completa(cliente_id, itens_carrinho, total, forma_pagamento,
     finally:
         db.disconnect()
 
-# --- FUNÇÕES DE RELATÓRIOS MELHORADAS ---
+# --- FUNÇÕES DE RELATÓRIOS MELHORADAS E CORRIGIDAS ---
 def get_relatorio_vendas_detalhado():
-    """Relatório detalhado de vendas"""
+    """Relatório detalhado de vendas - CORRIGIDA"""
     db = DatabaseManager()
     
     if not db.connect():
         return []
     
     query = """
-        SELECT v.id, v.data_venda, v.total, c.nome as cliente_nome,
-               GROUP_CONCAT(p.nome || ' (x' || iv.quantidade || ')', '; ') as produtos
+        SELECT v.id, v.data_venda, v.total, v.forma_pagamento,
+               c.nome as cliente_nome, p.nome as produto_nome,
+               iv.quantidade, iv.preco_unitario
         FROM vendas v
         LEFT JOIN clientes c ON v.cliente_id = c.id
         JOIN itens_venda iv ON v.id = iv.venda_id
         JOIN produtos p ON iv.produto_id = p.id
-        GROUP BY v.id 
         ORDER BY v.data_venda DESC 
     """
     vendas = db.fetch_all(query)
     db.disconnect()
-    return vendas
+    return vendas  # Já convertido para dicionários pelo DatabaseManager
 
 def get_relatorio_estoque():
-    """Relatório de estoque"""
-    return listar_produtos()
+    """Relatório de estoque - CORRIGIDA"""
+    return listar_produtos()  # Já convertido para dicionários
 
 def get_relatorio_movimentacao_estoque():
-    """Relatório de movimentação de estoque"""
+    """Relatório de movimentação de estoque - CORRIGIDA"""
     db = DatabaseManager()
     
     if not db.connect():
@@ -669,7 +683,7 @@ def get_relatorio_movimentacao_estoque():
     """
     movimentos = db.fetch_all(query)
     db.disconnect()
-    return movimentos
+    return movimentos  # Já convertido para dicionários pelo DatabaseManager
 
 # --- NOVAS FUNÇÕES ADICIONAIS ---
 def get_estatisticas_gerais():
@@ -681,22 +695,28 @@ def get_estatisticas_gerais():
     
     try:
         # Total de produtos
-        total_produtos = db.fetch_one("SELECT COUNT(*) as total FROM produtos")['total']
+        total_produtos_result = db.fetch_one("SELECT COUNT(*) as total FROM produtos")
+        total_produtos = total_produtos_result['total'] if total_produtos_result else 0
         
         # Produtos em estoque
-        produtos_estoque = db.fetch_one("SELECT COUNT(*) as total FROM produtos WHERE quantidade > 0")['total']
+        produtos_estoque_result = db.fetch_one("SELECT COUNT(*) as total FROM produtos WHERE quantidade > 0")
+        produtos_estoque = produtos_estoque_result['total'] if produtos_estoque_result else 0
         
         # Produtos sem estoque
-        produtos_sem_estoque = db.fetch_one("SELECT COUNT(*) as total FROM produtos WHERE quantidade = 0")['total']
+        produtos_sem_estoque_result = db.fetch_one("SELECT COUNT(*) as total FROM produtos WHERE quantidade = 0")
+        produtos_sem_estoque = produtos_sem_estoque_result['total'] if produtos_sem_estoque_result else 0
         
         # Valor total do estoque
-        valor_estoque = db.fetch_one("SELECT SUM(preco * quantidade) as total FROM produtos")['total'] or 0
+        valor_estoque_result = db.fetch_one("SELECT SUM(preco * quantidade) as total FROM produtos")
+        valor_estoque = valor_estoque_result['total'] if valor_estoque_result and valor_estoque_result['total'] else 0
         
         # Total de vendas
-        total_vendas = db.fetch_one("SELECT COUNT(*) as total FROM vendas")['total']
+        total_vendas_result = db.fetch_one("SELECT COUNT(*) as total FROM vendas")
+        total_vendas = total_vendas_result['total'] if total_vendas_result else 0
         
         # Valor total vendido
-        valor_total_vendas = db.fetch_one("SELECT SUM(total) as total FROM vendas")['total'] or 0
+        valor_total_vendas_result = db.fetch_one("SELECT SUM(total) as total FROM vendas")
+        valor_total_vendas = valor_total_vendas_result['total'] if valor_total_vendas_result and valor_total_vendas_result['total'] else 0
         
         return {
             'total_produtos': total_produtos,
@@ -712,3 +732,19 @@ def get_estatisticas_gerais():
         return {}
     finally:
         db.disconnect()
+
+# --- FUNÇÕES DE BUSCA MELHORADAS ---
+def buscar_produtos_por_nome(nome):
+    """Busca produtos por nome (para busca flexível) - CORRIGIDA"""
+    nome = sanitizar_input(nome)
+    db = DatabaseManager()
+    
+    if not db.connect():
+        return []
+        
+    produtos = db.fetch_all(
+        "SELECT * FROM produtos WHERE nome LIKE ? ORDER BY nome", 
+        (f'%{nome}%',)
+    )
+    db.disconnect()
+    return produtos  # Já convertido para dicionários pelo DatabaseManager
