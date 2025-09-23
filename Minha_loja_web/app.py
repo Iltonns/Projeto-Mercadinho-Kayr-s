@@ -151,12 +151,38 @@ def login():
 @app.route('/logout')
 @login_required
 def logout():
-    """Rota de logout"""
-    username = current_user.username
-    logout_user()
-    session.clear()
-    flash(f'Até logo, {username}! Você saiu do sistema.', 'info')
-    return redirect(url_for('login'))
+    """Rota de logout - CORRIGIDA"""
+    try:
+        # Limpar flash messages primeiro
+        session.pop('_flashes', None)
+        
+        username = current_user.username
+        logout_user()  # Flask-Login logout
+        
+        # Limpar completamente a sessão
+        session.clear()
+        
+        # Garantir que a sessão seja realmente limpa
+        session.permanent = False
+        
+        flash(f'Até logo, {username}! Você saiu do sistema.', 'info')
+        return redirect(url_for('login'))
+        
+    except Exception as e:
+        print(f"Erro durante logout: {e}")
+        # Forçar limpeza em caso de erro
+        session.clear()
+        return redirect(url_for('login'))
+    
+@app.after_request
+def after_request(response):
+    """Limpar flash messages após cada requisição para evitar acumulação"""
+    if '_flashes' in session:
+        # Manter apenas as flash messages mais recentes
+        flashes = session.get('_flashes', [])
+        if len(flashes) > 3:  # Limitar a 3 mensagens
+            session['_flashes'] = flashes[-3:]
+    return response    
 
 @app.route('/cadastro', methods=['GET', 'POST'])
 def cadastro():

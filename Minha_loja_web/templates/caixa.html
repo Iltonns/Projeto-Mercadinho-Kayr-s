@@ -173,94 +173,132 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
     <script>
-        let carrinho = [];
-
-        $(document).ready(function() { $('#clienteSelect').select2(); });
-
-        // Autocomplete
-        document.getElementById('buscaRapida').addEventListener('input', function(e) {
-            const termo = e.target.value.trim();
-            if (termo.length >= 2) buscarAutocomplete(termo);
-            else document.getElementById('suggestions').style.display = 'none';
-        });
-
-        function buscarAutocomplete(termo) {
-            fetch(`/api/autocomplete_produtos/${encodeURIComponent(termo)}`)
-                .then(resp => resp.json())
-                .then(produtos => {
-                    const suggestions = document.getElementById('suggestions');
-                    suggestions.innerHTML = '';
-                    produtos.forEach(prod => {
-                        const div = document.createElement('div');
-                        div.className = 'autocomplete-suggestion';
-                        div.innerHTML = `<strong>${prod.nome}</strong><br><small>R$ ${prod.preco.toFixed(2)} | Estoque: ${prod.quantidade} | Cód: ${prod.codigo_barras || 'N/A'}</small>`;
-                        div.onclick = () => { adicionarAoCarrinho(prod.id, prod.nome, prod.preco, prod.quantidade); suggestions.style.display = 'none'; document.getElementById('buscaRapida').value = ''; };
-                        suggestions.appendChild(div);
-                    });
-                    suggestions.style.display = produtos.length > 0 ? 'block' : 'none';
-                })
-                .catch(err => console.error('Erro no autocomplete:', err));
-        }
-
-        // Funções de carrinho
-        function adicionarAoCarrinho(id, nome, preco, estoque) {
-            const itemExistente = carrinho.find(item => item.id === id);
-            if (itemExistente) { if (itemExistente.quantidade < estoque) itemExistente.quantidade++; else { alert('Estoque insuficiente!'); return; } }
-            else { if (estoque > 0) carrinho.push({id, nome, preco, quantidade:1, estoque}); else { alert('Produto sem estoque!'); return; } }
-            atualizarCarrinho(); document.getElementById('suggestions').style.display = 'none';
-        }
-
-        function atualizarCarrinho() {
-            const tbody = document.getElementById('carrinhoTbody');
-            const totalSpan = document.getElementById('totalCarrinho');
-            const carrinhoVazio = document.getElementById('carrinhoVazio');
-            const carrinhoItens = document.getElementById('carrinhoItens');
-
-            tbody.innerHTML = '';
-            let total = 0;
-            if (carrinho.length === 0) { carrinhoVazio.style.display = 'block'; carrinhoItens.style.display = 'none'; return; }
-            carrinhoVazio.style.display = 'none'; carrinhoItens.style.display = 'block';
-
-            carrinho.forEach((item, index) => {
-                const subtotal = item.preco * item.quantidade; total += subtotal; item.subtotal = subtotal;
-                const tr = document.createElement('tr');
-                tr.innerHTML = `<td>${item.nome}</td>
-                    <td><div class="quantidade-control">
-                        <button class="quantidade-btn" onclick="alterarQuantidade(${index}, -1)">-</button>
-                        <input type="number" class="quantidade-input" value="${item.quantidade}" onchange="alterarQuantidadeInput(${index}, this.value)" min="1" max="${item.estoque}">
-                        <button class="quantidade-btn" onclick="alterarQuantidade(${index}, 1)">+</button>
-                    </div></td>
-                    <td>R$ ${item.preco.toFixed(2)}</td>
-                    <td>R$ ${subtotal.toFixed(2)}</td>
-                    <td><button class="btn btn-sm btn-danger" onclick="removerDoCarrinho(${index})"><i class="fas fa-trash"></i></button></td>`;
-                tbody.appendChild(tr);
+        <script>
+            let carrinho = [];
+        
+            $(document).ready(function() { $('#clienteSelect').select2(); });
+        
+            // Autocomplete
+            document.getElementById('buscaRapida').addEventListener('input', function(e) {
+                const termo = e.target.value.trim();
+                if (termo.length >= 2) buscarAutocomplete(termo);
+                else document.getElementById('suggestions').style.display = 'none';
             });
-            totalSpan.textContent = total.toFixed(2); calcularTroco();
-        }
-
-        function alterarQuantidade(index, delta) { const item = carrinho[index]; const novaQuantidade = item.quantidade + delta; if (novaQuantidade < 1) { removerDoCarrinho(index); return; } if (novaQuantidade > item.estoque) { alert('Quantidade superior ao estoque disponível!'); return; } item.quantidade = novaQuantidade; atualizarCarrinho(); }
-        function alterarQuantidadeInput(index, valor) { const quantidade = parseInt(valor); const item = carrinho[index]; if (isNaN(quantidade) || quantidade < 1) item.quantidade = 1; else if (quantidade > item.estoque) { alert('Quantidade superior ao estoque disponível!'); item.quantidade = item.estoque; } else item.quantidade = quantidade; atualizarCarrinho(); }
-        function removerDoCarrinho(index) { carrinho.splice(index, 1); atualizarCarrinho(); }
-        function limparCarrinho() { if (carrinho.length>0 && confirm('Deseja limpar o carrinho?')) { carrinho=[]; atualizarCarrinho(); } }
-
-        // Pagamento
-        function toggleTroco() { const metodo = document.getElementById('metodoPagamento').value; const divTroco = document.getElementById('divTroco'); if (metodo==='Dinheiro') { divTroco.style.display='block'; document.getElementById('valorPago').value=''; document.getElementById('troco').textContent='0.00'; } else { divTroco.style.display='none'; document.getElementById('valorPago').value=''; document.getElementById('troco').textContent='0.00'; } }
-        function calcularTroco() { const total=parseFloat(document.getElementById('totalCarrinho').textContent)||0; const valorPago=parseFloat(document.getElementById('valorPago').value)||0; document.getElementById('troco').textContent=Math.max(0,valorPago-total).toFixed(2); }
-
-        // Finalizar venda
-        function finalizarVenda() {
-            if (carrinho.length===0){alert('Carrinho vazio!');return;}
-            const clienteSelect=document.getElementById('clienteSelect');
-            const metodoPagamento=document.getElementById('metodoPagamento').value;
-            const valorPago=parseFloat(document.getElementById('valorPago').value)||0;
-            const total=parseFloat(document.getElementById('totalCarrinho').textContent);
-            if (metodoPagamento==='Dinheiro' && valorPago<total){alert('Valor pago insuficiente!');return;}
-            const dadosVenda={cliente_id:clienteSelect.value?parseInt(clienteSelect.value):null,itens:carrinho.map(item=>({id:item.id,quantidade:item.quantidade,preco:item.preco,subtotal:item.subtotal})),forma_pagamento:metodoPagamento,valor_pago:metodoPagamento==='Dinheiro'?valorPago:total,troco:metodoPagamento==='Dinheiro'?Math.max(0,valorPago-total):0};
-            fetch('/caixa/finalizar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dadosVenda)})
-                .then(resp=>resp.json())
-                .then(data=>{if(data.sucesso){alert('Venda finalizada com sucesso!');carrinho=[];atualizarCarrinho();document.getElementById('clienteSelect').value='';document.getElementById('metodoPagamento').value='Dinheiro';document.getElementById('valorPago').value='';toggleTroco();}else{alert('Erro: '+data.erro);}})
-                .catch(err=>{console.error('Erro:',err);alert('Erro ao finalizar venda');});
-        }
+        
+            function buscarAutocomplete(termo) {
+                // Primeira correção: Adicionando 'credentials' para autenticar a busca
+                fetch(`/api/autocomplete_produtos/${encodeURIComponent(termo)}`, { credentials: 'same-origin' }) // <-- CORREÇÃO 1 AQUI
+                    .then(resp => {
+                        if (!resp.ok) {
+                            throw new Error(`Erro HTTP: ${resp.status}`);
+                        }
+                        return resp.json();
+                    })
+                    .then(produtos => {
+                        const suggestions = document.getElementById('suggestions');
+                        suggestions.innerHTML = '';
+                        produtos.forEach(prod => {
+                            const div = document.createElement('div');
+                            div.className = 'autocomplete-suggestion';
+                            div.innerHTML = `<strong>${prod.nome}</strong><br><small>R$ ${prod.preco.toFixed(2)} | Estoque: ${prod.quantidade} | Cód: ${prod.codigo_barras || 'N/A'}</small>`;
+                            div.onclick = () => { adicionarAoCarrinho(prod.id, prod.nome, prod.preco, prod.quantidade); suggestions.style.display = 'none'; document.getElementById('buscaRapida').value = ''; };
+                            suggestions.appendChild(div);
+                        });
+                        suggestions.style.display = produtos.length > 0 ? 'block' : 'none';
+                    })
+                    .catch(err => {
+                        console.error('Erro no autocomplete:', err);
+                        // Opcional: notificar o usuário sobre a falha na busca
+                        // alert('Falha ao buscar produtos. Verifique o console.');
+                    });
+            }
+        
+            // Funções de carrinho (sem alterações aqui)
+            function adicionarAoCarrinho(id, nome, preco, estoque) {
+                const itemExistente = carrinho.find(item => item.id === id);
+                if (itemExistente) { if (itemExistente.quantidade < estoque) itemExistente.quantidade++; else { alert('Estoque insuficiente!'); return; } }
+                else { if (estoque > 0) carrinho.push({id, nome, preco, quantidade:1, estoque}); else { alert('Produto sem estoque!'); return; } }
+                atualizarCarrinho(); document.getElementById('suggestions').style.display = 'none';
+            }
+        
+            function atualizarCarrinho() {
+                const tbody = document.getElementById('carrinhoTbody');
+                const totalSpan = document.getElementById('totalCarrinho');
+                const carrinhoVazio = document.getElementById('carrinhoVazio');
+                const carrinhoItens = document.getElementById('carrinhoItens');
+        
+                tbody.innerHTML = '';
+                let total = 0;
+                if (carrinho.length === 0) { carrinhoVazio.style.display = 'block'; carrinhoItens.style.display = 'none'; return; }
+                carrinhoVazio.style.display = 'none'; carrinhoItens.style.display = 'block';
+        
+                carrinho.forEach((item, index) => {
+                    const subtotal = item.preco * item.quantidade; total += subtotal; item.subtotal = subtotal;
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td>${item.nome}</td>
+                        <td><div class="quantidade-control">
+                            <button class="quantidade-btn" onclick="alterarQuantidade(${index}, -1)">-</button>
+                            <input type="number" class="quantidade-input" value="${item.quantidade}" onchange="alterarQuantidadeInput(${index}, this.value)" min="1" max="${item.estoque}">
+                            <button class="quantidade-btn" onclick="alterarQuantidade(${index}, 1)">+</button>
+                        </div></td>
+                        <td>R$ ${item.preco.toFixed(2)}</td>
+                        <td>R$ ${subtotal.toFixed(2)}</td>
+                        <td><button class="btn btn-sm btn-danger" onclick="removerDoCarrinho(${index})"><i class="fas fa-trash"></i></button></td>`;
+                    tbody.appendChild(tr);
+                });
+                totalSpan.textContent = total.toFixed(2); calcularTroco();
+            }
+        
+            function alterarQuantidade(index, delta) { const item = carrinho[index]; const novaQuantidade = item.quantidade + delta; if (novaQuantidade < 1) { removerDoCarrinho(index); return; } if (novaQuantidade > item.estoque) { alert('Quantidade superior ao estoque disponível!'); return; } item.quantidade = novaQuantidade; atualizarCarrinho(); }
+            function alterarQuantidadeInput(index, valor) { const quantidade = parseInt(valor); const item = carrinho[index]; if (isNaN(quantidade) || quantidade < 1) item.quantidade = 1; else if (quantidade > item.estoque) { alert('Quantidade superior ao estoque disponível!'); item.quantidade = item.estoque; } else item.quantidade = quantidade; atualizarCarrinho(); }
+            function removerDoCarrinho(index) { carrinho.splice(index, 1); atualizarCarrinho(); }
+            function limparCarrinho() { if (carrinho.length>0 && confirm('Deseja limpar o carrinho?')) { carrinho=[]; atualizarCarrinho(); } }
+        
+            // Pagamento (sem alterações aqui)
+            function toggleTroco() { const metodo = document.getElementById('metodoPagamento').value; const divTroco = document.getElementById('divTroco'); if (metodo==='Dinheiro') { divTroco.style.display='block'; document.getElementById('valorPago').value=''; document.getElementById('troco').textContent='0.00'; } else { divTroco.style.display='none'; document.getElementById('valorPago').value=''; document.getElementById('troco').textContent='0.00'; } }
+            function calcularTroco() { const total=parseFloat(document.getElementById('totalCarrinho').textContent)||0; const valorPago=parseFloat(document.getElementById('valorPago').value)||0; document.getElementById('troco').textContent=Math.max(0,valorPago-total).toFixed(2); }
+        
+            // Finalizar venda
+            function finalizarVenda() {
+                if (carrinho.length===0){alert('Carrinho vazio!');return;}
+                const clienteSelect=document.getElementById('clienteSelect');
+                const metodoPagamento=document.getElementById('metodoPagamento').value;
+                const valorPago=parseFloat(document.getElementById('valorPago').value)||0;
+                const total=parseFloat(document.getElementById('totalCarrinho').textContent);
+                if (metodoPagamento==='Dinheiro' && valorPago<total){alert('Valor pago insuficiente!');return;}
+                const dadosVenda={cliente_id:clienteSelect.value?parseInt(clienteSelect.value):null,itens:carrinho.map(item=>({id:item.id,qtd:item.quantidade,preco:item.preco})),total:total,forma_pagamento:metodoPagamento,valor_pago:metodoPagamento==='Dinheiro'?valorPago:total,troco:metodoPagamento==='Dinheiro'?Math.max(0,valorPago-total):0};
+        
+                // Segunda correção: Adicionando 'credentials' para autenticar a finalização da venda
+                fetch('/caixa/finalizar', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(dadosVenda),
+                    credentials: 'same-origin' // <-- CORREÇÃO 2 AQUI
+                })
+                .then(resp => {
+                    if (!resp.ok) {
+                         // Se a resposta não for OK, tenta ler o erro do corpo da resposta
+                         return resp.json().then(err => Promise.reject(err));
+                    }
+                    return resp.json();
+                })
+                .then(data => {
+                    // Supondo que seu backend envie { mensagem: '...' } em caso de sucesso
+                    alert(data.mensagem || 'Venda finalizada com sucesso!');
+                    carrinho = [];
+                    atualizarCarrinho();
+                    document.getElementById('clienteSelect').value = '';
+                    $('#clienteSelect').val(null).trigger('change'); // Limpa o select2
+                    document.getElementById('metodoPagamento').value = 'Dinheiro';
+                    toggleTroco();
+                })
+                .catch(err => {
+                    console.error('Erro ao finalizar venda:', err);
+                    // Mostra o erro específico que veio do backend, se houver
+                    alert('Erro ao finalizar venda: ' + (err.erro || 'Erro desconhecido.'));
+                });
+            }
+        </script>
     </script>
 </body>
 </html>
