@@ -1,4 +1,3 @@
-
 # ==============================================================================
 # 1. IMPORTS MELHORADOS
 # ==============================================================================
@@ -151,38 +150,26 @@ def login():
 @app.route('/logout')
 @login_required
 def logout():
-    """Rota de logout - CORRIGIDA"""
+    """Rota de logout CORRIGIDA"""
     try:
-        # Limpar flash messages primeiro
-        session.pop('_flashes', None)
-        
+        # 1. Primeiro obtemos o username ANTES de fazer logout
         username = current_user.username
-        logout_user()  # Flask-Login logout
         
-        # Limpar completamente a sessão
+        # 2. Fazemos logout do Flask-Login
+        logout_user()
+        
+        # 3. Limpamos completamente a sessão
         session.clear()
         
-        # Garantir que a sessão seja realmente limpa
-        session.permanent = False
+        # 4. Mensagem única de flash
+        flash(f'Até logo, {username}! Você foi desconectado com sucesso.', 'info')
         
-        flash(f'Até logo, {username}! Você saiu do sistema.', 'info')
+        # 5. Redirecionamento claro
         return redirect(url_for('login'))
         
     except Exception as e:
-        print(f"Erro durante logout: {e}")
-        # Forçar limpeza em caso de erro
-        session.clear()
+        # Em caso de erro, força o redirect sem flash para evitar duplicação
         return redirect(url_for('login'))
-    
-@app.after_request
-def after_request(response):
-    """Limpar flash messages após cada requisição para evitar acumulação"""
-    if '_flashes' in session:
-        # Manter apenas as flash messages mais recentes
-        flashes = session.get('_flashes', [])
-        if len(flashes) > 3:  # Limitar a 3 mensagens
-            session['_flashes'] = flashes[-3:]
-    return response    
 
 @app.route('/cadastro', methods=['GET', 'POST'])
 def cadastro():
@@ -513,72 +500,19 @@ def caixa():
         flash('Erro ao carregar caixa.', 'danger')
         return render_template('caixa.html', produtos=[], clientes=[])
 
-# Rotas API
 @app.route('/api/buscar_produto/<code>')
 @login_required
 def api_buscar_produto(code):
-    """API para buscar produto por código ou nome - CORRIGIDA"""
+    """API para buscar produto por código"""
     try:
-        print(f"🔍 [DEBUG] Buscando produto por: '{code}'")
-        
         code = sanitizar_input(code)
-        
-        if not code or len(code) < 1:
-            return jsonify({'erro': 'Termo de busca inválido'}), 400
-        
-        # Buscar produto por código
         produto = db.buscar_produto_por_codigo(code)
-        
-        # Se não encontrou, buscar por nome (busca parcial)
-        if not produto:
-            produto = db.buscar_produto_por_nome(code)
-        
         if produto:
-            # Garantir que os dados estão no formato correto
-            produto_dict = {
-                'id': produto.id if hasattr(produto, 'id') else produto['id'],
-                'nome': produto.nome if hasattr(produto, 'nome') else produto['nome'],
-                'preco': float(produto.preco if hasattr(produto, 'preco') else produto['preco']),
-                'quantidade': produto.quantidade if hasattr(produto, 'quantidade') else produto['quantidade'],
-                'codigo_barras': produto.codigo_barras if hasattr(produto, 'codigo_barras') else produto.get('codigo_barras', '')
-            }
-            return jsonify(produto_dict)
+            return jsonify(dict(produto))
         else:
             return jsonify({'erro': 'Produto não encontrado'}), 404
-            
     except Exception as e:
-        print(f"Erro na API: {str(e)}")
         return jsonify({'erro': 'Erro interno do servidor'}), 500
-
-# NOVA ROTA PARA AUTCOMPLETE
-@app.route('/api/autocomplete_produtos/<termo>')
-@login_required
-def autocomplete_produtos(termo):
-    """API para autocomplete de produtos"""
-    try:
-        termo = sanitizar_input(termo)
-        
-        if not termo or len(termo) < 2:
-            return jsonify([])
-        
-        # Buscar produtos que contenham o termo no nome ou código
-        produtos = db.buscar_produtos_por_termo(termo)
-        
-        resultados = []
-        for produto in produtos:
-            resultados.append({
-                'id': produto.id if hasattr(produto, 'id') else produto['id'],
-                'nome': produto.nome if hasattr(produto, 'nome') else produto['nome'],
-                'preco': float(produto.preco if hasattr(produto, 'preco') else produto['preco']),
-                'quantidade': produto.quantidade if hasattr(produto, 'quantidade') else produto['quantidade'],
-                'codigo_barras': produto.codigo_barras if hasattr(produto, 'codigo_barras') else produto.get('codigo_barras', '')
-            })
-        
-        return jsonify(resultados)
-        
-    except Exception as e:
-        print(f"Erro no autocomplete: {str(e)}")
-        return jsonify([])
 
 @app.route('/caixa/finalizar', methods=['POST'])
 @login_required
@@ -586,72 +520,45 @@ def finalizar_venda():
     """Finalizar venda via AJAX"""
     try:
         dados = request.get_json()
-        print(f"🛒 Dados recebidos: {dados}")
         
         if not dados or 'itens' not in dados or not dados['itens']:
-            return jsonify({'sucesso': False, 'erro': 'Carrinho vazio.'}), 400
+            return jsonify({'erro': 'Dados da venda inválidos ou carrinho vazio.'}), 400
         
         itens_carrinho = dados.get('itens', [])
         total_recalculado = 0
-        itens_validados = []
-
+        
+        # Validar cada item do carrinho
         for item in itens_carrinho:
-            produto_id = item.get('id')
-            quantidade = int(item.get('quantidade', 0))
-            preco_front = float(item.get('preco', 0))  # enviado pelo front
-            subtotal_front = float(item.get('subtotal', 0))  # enviado pelo front
-            
-            if not produto_id or quantidade <= 0:
-                return jsonify({'sucesso': False, 'erro': 'Item inválido no carrinho.'}), 400
-
-            produto = db.buscar_produto_por_id(produto_id)
+            produto = db.buscar_produto_por_id(item['id'])
             if not produto:
-                return jsonify({'sucesso': False, 'erro': f'Produto com ID {produto_id} não encontrado.'}), 400
+                return jsonify({'erro': f'Produto com ID {item["id"]} não encontrado.'}), 400
             
-            if quantidade > produto.quantidade:
-                return jsonify({'sucesso': False, 'erro': f'Estoque insuficiente para {produto.nome}. Disponível: {produto.quantidade}'}), 400
+            if item['qtd'] > produto['quantidade']:
+                return jsonify({'erro': f'Estoque insuficiente para {produto["nome"]}.'}), 400
             
-            # Preço oficial do banco (segurança contra alteração no front)
-            preco_oficial = float(produto.preco)
-            subtotal_calculado = preco_oficial * quantidade
-
-            # Comparar com subtotal enviado pelo front (opcional)
-            if abs(subtotal_calculado - subtotal_front) > 0.01:
-                print(f"⚠️ Divergência detectada no item {produto.nome}: front={subtotal_front}, server={subtotal_calculado}")
-            
-            itens_validados.append({
-                'id': produto.id,
-                'nome': produto.nome,
-                'quantidade': quantidade,
-                'preco': preco_oficial,
-                'subtotal': subtotal_calculado
-            })
-
-            total_recalculado += subtotal_calculado
-
+            total_recalculado += produto['preco'] * item['qtd']
+        
         # Registrar venda
         venda_id, mensagem = db.registrar_venda_completa(
             cliente_id=dados.get('cliente_id'),
-            itens_carrinho=itens_validados,
+            itens_carrinho=itens_carrinho,
             total=total_recalculado,
             forma_pagamento=dados.get('forma_pagamento', 'Dinheiro'),
             valor_pago=dados.get('valor_pago', total_recalculado),
             troco=dados.get('troco', 0)
         )
-
+        
         if venda_id:
             return jsonify({
-                'sucesso': True,
                 'mensagem': 'Venda finalizada com sucesso!',
                 'venda_id': venda_id
             })
         else:
-            return jsonify({'sucesso': False, 'erro': mensagem}), 400
-
+            return jsonify({'erro': mensagem}), 400
+            
     except Exception as e:
-        print(f"❌ Erro ao finalizar venda: {str(e)}")
-        return jsonify({'sucesso': False, 'erro': 'Erro interno do servidor.'}), 500
-
+        print(f"Erro ao finalizar venda: {e}")
+        return jsonify({'erro': 'Ocorreu um erro interno no servidor.'}), 500
 
 # ==============================================================================
 # 12. ROTAS DE RELATÓRIOS

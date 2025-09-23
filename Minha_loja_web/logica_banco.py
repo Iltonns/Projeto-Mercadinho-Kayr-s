@@ -351,96 +351,20 @@ def buscar_produto_por_id(id):
     return produto
 
 def buscar_produto_por_codigo(codigo):
-    """Busca produto por código de barras ou nome - CORRIGIDA E OTIMIZADA"""
-    if not codigo:
-        return None
-        
-    codigo_limpo = sanitizar_input(codigo)
+    """Busca produto por código ou nome"""
+    codigo = sanitizar_input(codigo)
     db = DatabaseManager()
     
     if not db.connect():
         return None
         
-    try:
-        print(f"🔍 [DB] Buscando produto: '{codigo_limpo}'")
-        
-        # Primeiro: buscar por código de barras EXATO
-        produto = db.fetch_one(
-            "SELECT * FROM produtos WHERE codigo_barras = ?", 
-            (codigo_limpo,)
-        )
-        if produto:
-            print(f"✅ [DB] Encontrado por código de barras: {dict(produto)['nome']}")
-            return produto
-        
-        # Segundo: buscar por nome (LIKE) - case insensitive
-        produto = db.fetch_one(
-            "SELECT * FROM produtos WHERE LOWER(nome) LIKE LOWER(?)", 
-            (f'%{codigo_limpo}%',)
-        )
-        
-        if produto:
-            print(f"✅ [DB] Encontrado por nome: {dict(produto)['nome']}")
-        else:
-            print("❌ [DB] Nenhum produto encontrado")
-            
-        return produto
-        
-    except Exception as e:
-        print(f"❌ [DB] Erro na busca: {e}")
-        return None
-    finally:
-        db.disconnect()
-        
-def buscar_produtos_por_termo(termo):
-    """Buscar produtos por termo (nome ou código) - para autocomplete"""
-    try:
-        conn = criar_conexao()
-        cursor = conn.cursor()
-        
-        termo = f"%{termo}%"
-        cursor.execute("""
-            SELECT * FROM produtos 
-            WHERE nome LIKE ? OR codigo_barras LIKE ? 
-            ORDER BY nome LIMIT 10
-        """, (termo, termo))
-        
-        resultados = cursor.fetchall()
-        produtos = []
-        
-        for row in resultados:
-            produtos.append({
-                'id': row[0],
-                'nome': row[1],
-                'preco': row[2],
-                'quantidade': row[3],
-                'codigo_barras': row[4]
-            })
-        
-        conn.close()
-        return produtos
-        
-    except Exception as e:
-        print(f"Erro ao buscar produtos por termo: {e}")
-        return []      
-    
-def buscar_produto_por_nome(nome):
-    conn = sqlite3.connect('banco.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM produtos WHERE nome LIKE ?", ('%' + nome + '%',))
-    produto = cursor.fetchone()
-    conn.close()
+    produto = db.fetch_one(
+        "SELECT * FROM produtos WHERE LOWER(codigo_barras) = LOWER(?) OR LOWER(nome) LIKE LOWER(?)", 
+        (codigo, f'%{codigo}%')
+    )
+    db.disconnect()
     return produto
 
-def buscar_produto_por_id(produto_id):
-    conn = sqlite3.connect('banco.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM produtos WHERE id = ?", (produto_id,))
-    produto = cursor.fetchone()
-    conn.close()
-    return produto
-      
-               
 def atualizar_produto(id, nome, preco, quantidade, codigo_barras=None):
     """Atualiza produto com validações"""
     nome = sanitizar_input(nome)
@@ -472,20 +396,10 @@ def atualizar_produto(id, nome, preco, quantidade, codigo_barras=None):
             if existente:
                 return False, "Código de barras já existe em outro produto"
         
-        # VERIFICAR SE A COLUNA data_atualizacao EXISTE
-        # Primeiro, vamos verificar a estrutura da tabela
-        colunas = db.fetch_all("PRAGMA table_info(produtos)")
-        colunas_existentes = [coluna['name'] for coluna in colunas]
-        
-        # Construir a query dinamicamente baseado nas colunas existentes
-        if 'data_atualizacao' in colunas_existentes:
-            query = "UPDATE produtos SET nome = ?, preco = ?, quantidade = ?, codigo_barras = ?, data_atualizacao = datetime('now') WHERE id = ?"
-            params = (nome, preco_float, qtd_int, codigo_barras, id)
-        else:
-            query = "UPDATE produtos SET nome = ?, preco = ?, quantidade = ?, codigo_barras = ? WHERE id = ?"
-            params = (nome, preco_float, qtd_int, codigo_barras, id)
-        
-        cursor = db.execute_query(query, params)
+        cursor = db.execute_query(
+            "UPDATE produtos SET nome = ?, preco = ?, quantidade = ?, codigo_barras = ?, data_atualizacao = CURRENT_TIMESTAMP WHERE id = ?", 
+            (nome, preco_float, qtd_int, codigo_barras, id)
+        )
         
         if cursor:
             return True, "Produto atualizado com sucesso"
@@ -637,65 +551,82 @@ def excluir_cliente(id):
         db.disconnect()
 
 # --- FUNÇÕES DE VENDAS MELHORADAS ---
-def registrar_venda_completa(cliente_id, itens_carrinho, total, forma_pagamento='Dinheiro', valor_pago=None, troco=0):
-    """
-    Registra a venda completa no banco e atualiza o estoque.
-    Args:
-        cliente_id (int | None): ID do cliente (opcional)
-        itens_carrinho (list): Lista de itens validados [{'id', 'nome', 'quantidade', 'preco', 'subtotal'}]
-        total (float): Total da venda
-        forma_pagamento (str): Forma de pagamento
-        valor_pago (float | None): Valor recebido
-        troco (float): Troco
-    Returns:
-        venda_id, mensagem
-    """
-    conn = None
+def registrar_venda_completa(cliente_id, itens_carrinho, total, forma_pagamento, valor_pago, troco):
+    """Registra venda completa com transação segura"""
+    if not itens_carrinho:
+        return None, "Carrinho vazio"
+    
+    if total <= 0:
+        return None, "Total inválido"
+    
+    db = DatabaseManager()
+    
+    if not db.connect():
+        return None, "Erro de conexão com o banco"
+    
+    venda_id = None
     try:
-        conn = get_conexao()  # Função que retorna conexão
-        cursor = conn.cursor()
-
-        # Começa transação
-        conn.begin()
-
-        # Inserir venda
-        cursor.execute("""
-            INSERT INTO vendas (cliente_id, total, forma_pagamento, valor_pago, troco, data_hora)
-            VALUES (%s, %s, %s, %s, %s, NOW())
-        """, (cliente_id, total, forma_pagamento, valor_pago or total, troco))
+        data_venda = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Iniciar transação
+        cursor = db.execute_query(
+            "INSERT INTO vendas (cliente_id, data_venda, total, forma_pagamento, valor_pago, troco) VALUES (?, ?, ?, ?, ?, ?)", 
+            (cliente_id, data_venda, total, forma_pagamento, valor_pago, troco)
+        )
+        
+        if not cursor:
+            db.conn.rollback()
+            return None, "Erro ao registrar venda"
+        
         venda_id = cursor.lastrowid
-
-        # Inserir itens e atualizar estoque
+        
+        # Registrar itens da venda e atualizar estoque
         for item in itens_carrinho:
-            # Inserir item na tabela venda_itens
-            cursor.execute("""
-                INSERT INTO venda_itens (venda_id, produto_id, quantidade, preco_unitario, subtotal)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (venda_id, item['id'], item['quantidade'], item['preco'], item['subtotal']))
-
+            produto = buscar_produto_por_id(item['id'])
+            if not produto:
+                db.conn.rollback()
+                return None, f"Produto ID {item['id']} não encontrado"
+            
+            if produto['quantidade'] < item['qtd']:
+                db.conn.rollback()
+                return None, f"Estoque insuficiente para {produto['nome']}"
+            
+            # Registrar item da venda
+            cursor_item = db.execute_query(
+                "INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario) VALUES (?, ?, ?, ?)", 
+                (venda_id, item['id'], item['qtd'], produto['preco'])
+            )
+            
+            if not cursor_item:
+                db.conn.rollback()
+                return None, "Erro ao registrar item da venda"
+            
             # Atualizar estoque
-            cursor.execute("""
-                UPDATE produtos
-                SET quantidade = quantidade - %s
-                WHERE id = %s AND quantidade >= %s
-            """, (item['quantidade'], item['id'], item['quantidade']))
-
-            if cursor.rowcount == 0:
-                raise Exception(f'Estoque insuficiente para {item["nome"]}')
-
-        # Commit da transação
-        conn.commit()
-        return venda_id, 'Venda registrada com sucesso.'
-
+            nova_quantidade = produto['quantidade'] - item['qtd']
+            cursor_estoque = db.execute_query(
+                "UPDATE produtos SET quantidade = ?, data_atualizacao = CURRENT_TIMESTAMP WHERE id = ?", 
+                (nova_quantidade, item['id'])
+            )
+            
+            if not cursor_estoque:
+                db.conn.rollback()
+                return None, "Erro ao atualizar estoque"
+            
+            # Registrar saída no histórico
+            db.execute_query(
+                "INSERT INTO historico_estoque (produto_id, tipo_movimento, quantidade, data_movimento) VALUES (?, 'saida', ?, ?)", 
+                (item['id'], item['qtd'], data_venda)
+            )
+        
+        db.conn.commit()
+        return venda_id, "Venda registrada com sucesso"
+        
     except Exception as e:
-        if conn:
-            conn.rollback()
-        return None, str(e)
+        if db.conn:
+            db.conn.rollback()
+        return None, f"Erro ao registrar venda: {str(e)}"
     finally:
-        if conn:
-            cursor.close()
-            conn.close()
-
+        db.disconnect()
 
 # --- FUNÇÕES DE RELATÓRIOS MELHORADAS ---
 def get_relatorio_vendas_detalhado():
