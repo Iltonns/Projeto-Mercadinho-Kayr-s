@@ -385,7 +385,7 @@ def excluir_produto(id):
 @app.route('/buscar_produto_caixa', methods=['POST'])
 @login_required
 def buscar_produto_caixa():
-    """Busca de produtos para o caixa - CORRIGIDA"""
+    """Busca de produtos para o caixa - AGORA RETORNA LISTA"""
     try:
         data = request.get_json()
         if not data:
@@ -396,38 +396,99 @@ def buscar_produto_caixa():
         if not codigo:
             return jsonify({'success': False, 'message': 'Código ou nome do produto é obrigatório'})
         
-        # Buscar produto por código ou nome
+        produtos_encontrados = []
+
+        # Buscar por código exato
         produto = db.buscar_produto_por_codigo(codigo)
-        if not produto:
-            # Tentar buscar por nome se não encontrar por código
-            produtos = db.listar_produtos()
-            for prod in produtos:
-                if codigo.lower() in prod['nome'].lower():
-                    produto = prod
-                    break
-        
         if produto:
+            produtos_encontrados.append(produto)
+
+        # Buscar por nome (todos que batem)
+        for prod in db.listar_produtos():
+            if codigo.lower() in prod['nome'].lower():
+                if prod not in produtos_encontrados:  # evita duplicado
+                    produtos_encontrados.append(prod)
+        
+        if produtos_encontrados:
             return jsonify({
                 'success': True,
-                'produto': {
-                    'id': produto['id'],
-                    'nome': produto['nome'],
-                    'preco': produto['preco'],
-                    'quantidade': produto['quantidade'],
-                    'codigo': produto.get('codigo_barras', '')
-                }
+                'produtos': [
+                    {
+                        'id': p['id'],
+                        'nome': p['nome'],
+                        'preco': p['preco'],
+                        'quantidade': p['quantidade'],
+                        'codigo': p.get('codigo_barras', '')
+                    }
+                    for p in produtos_encontrados
+                ]
             })
         else:
-            return jsonify({'success': False, 'message': 'Produto não encontrado'})
+            return jsonify({'success': False, 'message': 'Nenhum produto encontrado'})
             
     except Exception as e:
-        print(f"Erro na busca: {e}")
+        print(f"Erro na busca caixa: {e}")
         return jsonify({'success': False, 'message': 'Erro interno do servidor'})
+
+
 
 @app.route('/buscar_produto_estoque', methods=['POST'])
 @login_required
 def buscar_produto_estoque():
-    """Busca de produtos para o estoque - CORRIGIDA"""
+    """Busca de produtos para o estoque - AGORA RETORNA LISTA"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'Dados inválidos'})
+
+        codigo = sanitizar_input(data.get('codigo', ''))
+
+        if not codigo:
+            return jsonify({'success': False, 'message': 'Código ou nome do produto é obrigatório'})
+
+        produtos_encontrados = []
+
+        # Buscar por código de barras exato
+        produto = db.buscar_produto_por_codigo(codigo)
+        if produto:
+            produtos_encontrados.append(produto)
+
+        # Buscar por nome (todos que batem)
+        for prod in db.listar_produtos():
+            if codigo.lower() in prod['nome'].lower():
+                if prod not in produtos_encontrados:  # evita duplicado
+                    produtos_encontrados.append(prod)
+
+        if produtos_encontrados:
+            return jsonify({
+                'success': True,
+                'produtos': [
+                    {
+                        'id': p['id'],
+                        'nome': p['nome'],
+                        'preco': p['preco'],
+                        'quantidade': p['quantidade'],
+                        'codigo': p.get('codigo_barras', '')
+                    }
+                    for p in produtos_encontrados
+                ]
+            })
+        else:
+            return jsonify({'success': False, 'message': 'Nenhum produto encontrado'})
+
+    except Exception as e:
+        print(f"Erro na busca estoque: {e}")
+        return jsonify({'success': False, 'message': 'Erro interno do servidor'})
+
+
+# ==============================================================================
+# 9.1 ROTAS DE BUSCA DE PRODUTOS - AJUSTADAS PARA LISTA
+# ==============================================================================
+
+@app.route('/buscar_produto_caixa', methods=['POST'])
+@login_required
+def buscar_produto_caixa():
+    """Busca de produtos para o caixa - retorna lista"""
     try:
         data = request.get_json()
         if not data:
@@ -438,88 +499,89 @@ def buscar_produto_estoque():
         if not codigo:
             return jsonify({'success': False, 'message': 'Código ou nome do produto é obrigatório'})
         
-        # Buscar produto por código ou nome
+        produtos_encontrados = []
+
+        # Buscar por código exato
         produto = db.buscar_produto_por_codigo(codigo)
-        if not produto:
-            # Tentar buscar por nome se não encontrar por código
-            produtos = db.listar_produtos()
-            for prod in produtos:
-                if codigo.lower() in prod['nome'].lower():
-                    produto = prod
-                    break
-        
         if produto:
+            produtos_encontrados.append(produto)
+        
+        # Buscar por nome (todos os que batem)
+        todos_produtos = db.listar_produtos()
+        for prod in todos_produtos:
+            if codigo.lower() in prod['nome'].lower():
+                produtos_encontrados.append(prod)
+
+        if produtos_encontrados:
             return jsonify({
                 'success': True,
-                'produto': {
-                    'id': produto['id'],
-                    'nome': produto['nome'],
-                    'preco': produto['preco'],
-                    'quantidade': produto['quantidade'],
-                    'codigo': produto.get('codigo_barras', '')
-                }
+                'produtos': [
+                    {
+                        'id': p['id'],
+                        'nome': p['nome'],
+                        'preco': p['preco'],
+                        'quantidade': p['quantidade'],
+                        'codigo': p.get('codigo_barras', '')
+                    }
+                    for p in produtos_encontrados
+                ]
             })
         else:
-            return jsonify({'success': False, 'message': 'Produto não encontrado'})
-            
+            return jsonify({'success': False, 'message': 'Nenhum produto encontrado'})
+    
     except Exception as e:
         print(f"Erro na busca: {e}")
         return jsonify({'success': False, 'message': 'Erro interno do servidor'})
 
-# ==============================================================================
-# 9.2 ROTA DE ATUALIZAÇÃO DE PRODUTOS - CORRIGIDA
-# ==============================================================================
-@app.route('/atualizar_produto', methods=['POST'])
+
+@app.route('/buscar_produto_estoque', methods=['POST'])
 @login_required
-def atualizar_produto():
-    """Atualizar produto - CORRIGIDA"""
+def buscar_produto_estoque():
+    """Busca de produtos para o estoque - retorna lista"""
     try:
-        produto_id = request.form.get('produto_id')
-        nome = sanitizar_input(request.form.get('nome', ''))
-        preco = request.form.get('preco', '')
-        quantidade = request.form.get('quantidade', '')
-        codigo = sanitizar_input(request.form.get('codigo_barras', ''))
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'Dados inválidos'})
         
-        if not produto_id:
-            flash('ID do produto é obrigatório', 'error')
-            return redirect('/estoque')
+        codigo = sanitizar_input(data.get('codigo', ''))
         
-        # Validações
-        if not nome or len(nome) < 2:
-            flash('Nome do produto deve ter pelo menos 2 caracteres.', 'error')
-            return redirect('/estoque')
-
-        try:
-            preco_float = float(preco)
-            if preco_float <= 0:
-                flash('Preço deve ser maior que zero.', 'error')
-                return redirect('/estoque')
-        except (ValueError, TypeError):
-            flash('Preço inválido.', 'error')
-            return redirect('/estoque')
-
-        try:
-            quantidade_int = int(quantidade)
-            if quantidade_int < 0:
-                flash('Quantidade não pode ser negativa.', 'error')
-                return redirect('/estoque')
-        except (ValueError, TypeError):
-            flash('Quantidade inválida.', 'error')
-            return redirect('/estoque')
-
-        # Atualizar produto
-        sucesso, mensagem = db.atualizar_produto(int(produto_id), nome, preco_float, quantidade_int, codigo)
+        if not codigo:
+            return jsonify({'success': False, 'message': 'Código ou nome do produto é obrigatório'})
         
-        if sucesso:
-            flash('Produto atualizado com sucesso!', 'success')
+        produtos_encontrados = []
+
+        # Buscar por código exato
+        produto = db.buscar_produto_por_codigo(codigo)
+        if produto:
+            produtos_encontrados.append(produto)
+        
+        # Buscar por nome (todos os que batem)
+        todos_produtos = db.listar_produtos()
+        for prod in todos_produtos:
+            if codigo.lower() in prod['nome'].lower():
+                produtos_encontrados.append(prod)
+
+        if produtos_encontrados:
+            return jsonify({
+                'success': True,
+                'produtos': [
+                    {
+                        'id': p['id'],
+                        'nome': p['nome'],
+                        'preco': p['preco'],
+                        'quantidade': p['quantidade'],
+                        'codigo': p.get('codigo_barras', '')
+                    }
+                    for p in produtos_encontrados
+                ]
+            })
         else:
-            flash(mensagem, 'error')
-        
-        return redirect('/estoque')
-        
+            return jsonify({'success': False, 'message': 'Nenhum produto encontrado'})
+    
     except Exception as e:
-        flash(f'Erro ao atualizar produto: {str(e)}', 'error')
-        return redirect('/estoque')
+        print(f"Erro na busca: {e}")
+        return jsonify({'success': False, 'message': 'Erro interno do servidor'})
+
 
 # ==============================================================================
 # 10. ROTAS DE CLIENTES MELHORADAS (CRUD)
@@ -651,17 +713,43 @@ def caixa():
 @app.route('/api/buscar_produto/<code>')
 @login_required
 def api_buscar_produto(code):
-    """API para buscar produto por código - CORRIGIDA"""
+    """API para buscar produto por código ou nome - AGORA RETORNA LISTA"""
     try:
         code = sanitizar_input(code)
+        produtos_encontrados = []
+
+        # Buscar por código exato
         produto = db.buscar_produto_por_codigo(code)
         if produto:
-            # CORREÇÃO: Já está convertido para dict na função
-            return jsonify(produto)
+            produtos_encontrados.append(produto)
+
+        # Buscar por nome (todos que batem)
+        for prod in db.listar_produtos():
+            if code.lower() in prod['nome'].lower():
+                if prod not in produtos_encontrados:  # evita duplicado
+                    produtos_encontrados.append(prod)
+
+        if produtos_encontrados:
+            return jsonify({
+                'success': True,
+                'produtos': [
+                    {
+                        'id': p['id'],
+                        'nome': p['nome'],
+                        'preco': p['preco'],
+                        'quantidade': p['quantidade'],
+                        'codigo': p.get('codigo_barras', '')
+                    }
+                    for p in produtos_encontrados
+                ]
+            })
         else:
-            return jsonify({'erro': 'Produto não encontrado'}), 404
+            return jsonify({'success': False, 'message': 'Nenhum produto encontrado'}), 404
+
     except Exception as e:
-        return jsonify({'erro': 'Erro interno do servidor'}), 500
+        print(f"Erro na API de busca: {e}")
+        return jsonify({'success': False, 'message': 'Erro interno do servidor'}), 500
+
 
 @app.route('/caixa/finalizar', methods=['POST'])
 @login_required
