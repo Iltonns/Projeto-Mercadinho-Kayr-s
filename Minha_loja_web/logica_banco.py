@@ -654,6 +654,7 @@ def registrar_venda_completa(cliente_id, itens_carrinho, total, forma_pagamento,
     finally:
         db.disconnect()
 
+
 # --- FUNÇÕES DE RELATÓRIOS MELHORADAS E CORRIGIDAS ---
 def get_relatorio_vendas_detalhado():
     """Relatório detalhado de vendas - CORRIGIDA"""
@@ -746,10 +747,52 @@ def get_estatisticas_gerais():
         return {}
     finally:
         db.disconnect()
+        
+def excluir_venda(venda_id):
+    """Exclui a venda e restaura o estoque dos produtos vendidos"""
+    db = DatabaseManager()
+    
+    if not db.connect():
+        return False, "Erro de conexão com o banco"
+    
+    try:
+        # Buscar a venda e seus itens
+        venda = db.fetch_one("SELECT * FROM vendas WHERE id = ?", (venda_id,))
+        if not venda:
+            return False, "Venda não encontrada"
+        
+        itens_venda = db.fetch_all("SELECT * FROM itens_venda WHERE venda_id = ?", (venda_id,))
+        
+        # Restaurar o estoque dos produtos
+        for item in itens_venda:
+            produto = db.fetch_one("SELECT * FROM produtos WHERE id = ?", (item['produto_id'],))
+            if produto:
+                nova_quantidade = produto['quantidade'] + item['quantidade']
+                db.execute_query("UPDATE produtos SET quantidade = ?, data_atualizacao = CURRENT_TIMESTAMP WHERE id = ?", 
+                                 (nova_quantidade, item['produto_id']))
+        
+        # Excluir os itens da venda
+        db.execute_query("DELETE FROM itens_venda WHERE venda_id = ?", (venda_id,))
+        
+        # Excluir a venda
+        db.execute_query("DELETE FROM vendas WHERE id = ?", (venda_id,))
+        
+        db.conn.commit()
+        return True, "Venda excluída com sucesso!"
+    
+    except Exception as e:
+        if db.conn:
+            db.conn.rollback()
+        return False, f"Erro ao excluir a venda: {e}"
+    finally:
+        db.disconnect()
+        
 
 # --- FUNÇÕES DE BUSCA MELHORADAS ---
-def buscar_produtos_por_nome(nome):
+
     """Busca produtos por nome (para busca flexível) - CORRIGIDA"""
+def buscar_produtos_por_nome(nome):
+    """Busca produtos por nome (para busca flexível)"""
     nome = sanitizar_input(nome)
     db = DatabaseManager()
     
@@ -757,8 +800,8 @@ def buscar_produtos_por_nome(nome):
         return []
         
     produtos = db.fetch_all(
-        "SELECT * FROM produtos WHERE nome LIKE ? ORDER BY nome", 
-        (f'%{nome}%',)
+        "SELECT * FROM produtos WHERE nome LIKE ? OR codigo_barras LIKE ? ORDER BY nome", 
+        (f'%{nome}%', f'%{nome}%')
     )
     db.disconnect()
     return produtos  # Já convertido para dicionários pelo DatabaseManager

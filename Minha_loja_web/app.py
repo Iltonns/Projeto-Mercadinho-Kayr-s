@@ -231,13 +231,14 @@ def index():
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
 
+# Na rota /dashboard - CORRIGIDA
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    """Dashboard administrativo com estatísticas"""
+    """Dashboard administrativo com estatísticas - CORRIGIDA"""
     try:
         estatisticas = db.get_estatisticas_gerais()
-        produtos_recentes = db.listar_produtos()[:5]  # Últimos 5 produtos
+        produtos_recentes = db.listar_produtos()[:5]  # ← Agora funciona corretamente
         
         return render_template('dashboard.html', 
                              estatisticas=estatisticas,
@@ -307,6 +308,7 @@ def adicionar_produto():
             flash('Erro ao adicionar produto. Tente novamente.', 'danger')
 
     return render_template('produto_formulario.html', titulo="Adicionar Produto", produto=None)
+
 
 @app.route('/produtos/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -382,10 +384,11 @@ def excluir_produto(id):
 # ==============================================================================
 # 9.1 ROTAS DE BUSCA DE PRODUTOS - NOVAS E CORRIGIDAS
 # ==============================================================================
+# Rota de Busca de Produto para o Caixa
 @app.route('/buscar_produto_caixa', methods=['POST'])
 @login_required
 def buscar_produto_caixa():
-    """Busca de produtos para o caixa - CORRIGIDA"""
+    """Busca de produtos para o caixa"""
     try:
         data = request.get_json()
         if not data:
@@ -423,6 +426,7 @@ def buscar_produto_caixa():
     except Exception as e:
         print(f"Erro na busca: {e}")
         return jsonify({'success': False, 'message': 'Erro interno do servidor'})
+
 
 @app.route('/buscar_produto_estoque', methods=['POST'])
 @login_required
@@ -664,22 +668,8 @@ def api_buscar_produto(code):
     except Exception as e:
         return jsonify({'erro': 'Erro interno do servidor'}), 500
 
-# Na rota /dashboard - CORRIGIDA
-@app.route('/dashboard')
-@login_required
-def dashboard():
-    """Dashboard administrativo com estatísticas - CORRIGIDA"""
-    try:
-        estatisticas = db.get_estatisticas_gerais()
-        produtos_recentes = db.listar_produtos()[:5]  # ← Agora funciona corretamente
-        
-        return render_template('dashboard.html', 
-                             estatisticas=estatisticas,
-                             produtos_recentes=produtos_recentes)
-    except Exception as e:
-        flash('Erro ao carregar dashboard.', 'danger')
-        return redirect(url_for('produtos'))
 
+# Rota de Finalizar Venda
 @app.route('/caixa/finalizar', methods=['POST'])
 @login_required
 def finalizar_venda():
@@ -725,6 +715,26 @@ def finalizar_venda():
     except Exception as e:
         print(f"Erro ao finalizar venda: {e}")
         return jsonify({'erro': 'Ocorreu um erro interno no servidor.'}), 500
+
+    
+# Rota de Excluir Venda
+@app.route('/vendas/excluir/<int:venda_id>', methods=['POST'])
+@login_required
+def excluir_venda(venda_id):
+    """Excluir venda e restaurar o estoque dos produtos vendidos"""
+    try:
+        sucesso, mensagem = db.excluir_venda(venda_id)
+        
+        if sucesso:
+            flash('Venda excluída com sucesso!', 'success')
+        else:
+            flash(mensagem, 'danger')
+        
+        return redirect(url_for('vendas'))
+    except Exception as e:
+        flash('Erro ao excluir venda.', 'danger')
+        return redirect(url_for('vendas'))
+    
 
 # ==============================================================================
 # 12. ROTAS DE RELATÓRIOS E EXPORTAÇÃO - NOVAS E CORRIGIDAS
