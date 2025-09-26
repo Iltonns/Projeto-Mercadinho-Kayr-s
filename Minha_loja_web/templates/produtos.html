@@ -64,12 +64,8 @@
                     </thead>
                     <tbody id="corpo-tabela">
                         {% for produto in produtos %}
-                        <tr class="produto-item" 
-                            data-produto-id="{{ produto.id }}"
-                            data-estoque="{{ produto.quantidade }}" 
-                            data-nome="{{ produto.nome|lower }}" 
-                            data-codigo="{{ produto.codigo_barras|default('', true)|lower }}">
-
+                        <tr class="produto-item" data-estoque="{{ produto.quantidade }}" 
+                            data-nome="{{ produto.nome|lower }}" data-codigo="{{ produto.codigo_barras|default('', true)|lower }}">
                             <td>
                                 <div class="d-flex align-items-center">
                                     <div class="bg-primary rounded-circle text-white p-2 me-3">
@@ -220,48 +216,47 @@ function inicializarEstoque() {
 }
 
 // CORREÇÃO: Busca de produtos no estoque
-f
-async function buscarProdutoEstoque() {
-    const termo = document.getElementById('buscar-input').value.trim();
-    const resultadoDiv = document.getElementById('resultado-busca-estoque');
-
-    if (!termo) {
-        resultadoDiv.innerHTML = `<div class="alert alert-warning">Digite um código ou nome.</div>`;
+function buscarProdutoEstoque(termo) {
+    if (!termo.trim()) {
+        // Se busca vazia, mostrar todos os produtos
+        mostrarTodosProdutos();
+        document.getElementById('resultado-busca-estoque').innerHTML = '';
         return;
     }
 
-    try {
-        const response = await fetch('/buscar_produto_estoque', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ codigo: termo })
-        });
-
-        const data = await response.json();
-
-        if (data.success && data.produtos && data.produtos.length > 0) {
-            // monta lista
-            resultadoDiv.innerHTML = `
-                <ul class="list-group">
-                    ${data.produtos.map(p => `
-                        <li class="list-group-item list-group-item-action"
-                            onclick="destacarProdutoEncontrado(${p.id})">
-                            <strong>${p.nome}</strong> <br>
-                            Código: ${p.codigo || '-'} | 
-                            Estoque: ${p.quantidade} | 
-                            R$ ${p.preco.toFixed(2)}
-                        </li>
-                    `).join('')}
-                </ul>
-            `;
-        } else {
-            resultadoDiv.innerHTML = `<div class="alert alert-danger">Nenhum produto encontrado.</div>`;
+    // Busca via API (igual ao caixa)
+    fetch('/buscar_produto_estoque', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ codigo: termo })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Erro na busca');
         }
-    } catch (err) {
-        console.error('Erro:', err);
-        resultadoDiv.innerHTML = `<div class="alert alert-danger">Erro ao buscar produto.</div>`;
-    }
-}
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            // Destacar produto encontrado
+            destacarProdutoEncontrado(data.produto.id);
+            document.getElementById('resultado-busca-estoque').innerHTML = 
+                `<div class="alert alert-success">Produto encontrado: <strong>${data.produto.nome}</strong></div>`;
+        } else {
+            document.getElementById('resultado-busca-estoque').innerHTML = 
+                `<div class="alert alert-warning">${data.message}</div>`;
+            // Tentar busca local
+            buscarLocalmente(termo);
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao buscar produto:', error);
+        document.getElementById('resultado-busca-estoque').innerHTML = 
+            '<div class="alert alert-danger">Erro na busca. Tentando busca local...</div>';
+        buscarLocalmente(termo);
+    });
 }
 
 function buscarLocalmente(termo) {
@@ -292,14 +287,21 @@ function buscarLocalmente(termo) {
 }
 
 function destacarProdutoEncontrado(produtoId) {
-    // Remove destaques antigos
-    document.querySelectorAll('.produto-item').forEach(el => el.classList.remove('table-warning'));
-
-    // Destaca linha correta
-    const linha = document.querySelector(`.produto-item[data-produto-id="${produtoId}"]`);
-    if (linha) {
-        linha.classList.add('table-warning');
-        linha.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Ocultar todos os produtos
+    todosProdutos.forEach(produto => {
+        produto.style.display = 'none';
+    });
+    
+    // Mostrar apenas o produto encontrado
+    const produtoEncontrado = document.querySelector(`.produto-item[data-produto-id="${produtoId}"]`);
+    if (produtoEncontrado) {
+        produtoEncontrado.style.display = '';
+        produtoEncontrado.classList.add('table-success');
+        
+        // Scroll para o produto
+        produtoEncontrado.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        document.getElementById('total-produtos').textContent = 1;
     }
 }
 

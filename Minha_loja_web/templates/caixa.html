@@ -234,13 +234,13 @@ function inicializarCaixa() {
 }
 
 // CORREÇÃO 1: Busca de produtos via POST (nova rota)
-// Busca de produtos via POST (rota corrigida, sempre retorna lista)
 function buscarEAdicionarProduto(termo) {
     if (!termo.trim()) {
         mostrarNotificacao('Digite um código ou nome do produto', 'warning');
         return;
     }
 
+    // Usando a nova rota POST corrigida
     fetch('/buscar_produto_caixa', {
         method: 'POST',
         headers: {
@@ -255,32 +255,13 @@ function buscarEAdicionarProduto(termo) {
         return response.json();
     })
     .then(data => {
-        const resultadoDiv = document.getElementById('resultado-busca');
-        resultadoDiv.innerHTML = '';
-
-        if (data.success && data.produtos && data.produtos.length > 0) {
-            if (data.produtos.length === 1) {
-                // Se só um produto, adiciona direto no carrinho
-                adicionarProdutoAoCarrinho(data.produtos[0]);
-            } else {
-                // Se vários, mostra opções
-                let html = '<div class="list-group">';
-                data.produtos.forEach(p => {
-                    html += `
-                        <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                                onclick='adicionarProdutoAoCarrinho(${JSON.stringify(p)})'>
-                            <span><strong>${p.nome}</strong> <small class="text-muted">(Estoque: ${p.quantidade})</small></span>
-                            <span class="badge bg-primary">R$ ${parseFloat(p.preco).toFixed(2)}</span>
-                        </button>
-                    `;
-                });
-                html += '</div>';
-                resultadoDiv.innerHTML = html;
-                mostrarNotificacao('Foram encontrados vários produtos, escolha um da lista.', 'info');
-            }
+        if (data.success) {
+            const produto = data.produto;
+            adicionarProdutoAoCarrinho(produto);
         } else {
             mostrarNotificacao(data.message || 'Produto não encontrado', 'danger');
-            resultadoDiv.innerHTML = `<div class="alert alert-warning">${data.message}</div>`;
+            document.getElementById('resultado-busca').innerHTML = 
+                `<div class="alert alert-warning">${data.message}</div>`;
         }
     })
     .catch(error => {
@@ -289,84 +270,41 @@ function buscarEAdicionarProduto(termo) {
     });
 }
 
-
-async function buscarProdutoCaixa() {
-    const termo = document.getElementById('buscar-input-caixa').value.trim();
-    const resultadoDiv = document.getElementById('resultado-busca-caixa');
-    
-    if (!termo) {
-        resultadoDiv.innerHTML = `<div class="alert alert-warning">Digite um código ou nome.</div>`;
-        return;
-    }
-    
-    try {
-         const response = await fetch('/buscar_produto_caixa', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ codigo: termo })
-        });
-    
-        const data = await response.json();
-    
-        if (data.success && data.produtos && data.produtos.length > 0) {
-                // Lista todos os produtos encontrados
-            resultadoDiv.innerHTML = `
-                <ul class="list-group">
-                    ${data.produtos.map(p => `
-                        <li class="list-group-item list-group-item-action"
-                             onclick="adicionarAoCarrinho(${p.id}, '${p.nome}', ${p.preco}, ${p.quantidade}, '${p.codigo || ''}')">
-                            <strong>${p.nome}</strong> <br>
-                            Código: ${p.codigo || '-'} | 
-                            Estoque: ${p.quantidade} | 
-                            R$ ${p.preco.toFixed(2)}
-                        </li>
-                    `).join('')}
-                </ul>
-            `;
-        } else {
-             resultadoDiv.innerHTML = `<div class="alert alert-danger">Nenhum produto encontrado.</div>`;
-        }
-    } catch (err) {
-         console.error('Erro:', err);
-         resultadoDiv.innerHTML = `<div class="alert alert-danger">Erro ao buscar produto.</div>`;
-    }
-    }
-}
-
 function adicionarProdutoAoCarrinho(produto) {
-    // Já existia? Incrementa a qtd
     const itemExistente = carrinho.find(item => item.id === produto.id);
+    
     if (itemExistente) {
-        if (itemExistente.qtd < produto.quantidade) {
-            itemExistente.qtd += 1;
+        // Verificar se pode aumentar a quantidade
+        if (itemExistente.quantidade < produto.quantidade) {
+            itemExistente.quantidade += 1;
+            mostrarNotificacao(`Quantidade de ${produto.nome} aumentada!`, 'info');
         } else {
-            mostrarNotificacao(`Estoque insuficiente para ${produto.nome}`, 'warning');
+            mostrarNotificacao(`Estoque insuficiente para ${produto.nome}!`, 'warning');
             return;
         }
     } else {
+        // Verificar se há estoque disponível
         if (produto.quantidade > 0) {
             carrinho.push({
                 id: produto.id,
                 nome: produto.nome,
-                preco: produto.preco,
-                qtd: 1
+                preco: parseFloat(produto.preco),
+                quantidade: 1,
+                estoque: parseInt(produto.quantidade)
             });
+            mostrarNotificacao(`${produto.nome} adicionado ao carrinho!`, 'success');
         } else {
-            mostrarNotificacao(`Produto sem estoque: ${produto.nome}`, 'warning');
+            mostrarNotificacao(`${produto.nome} sem estoque disponível!`, 'warning');
             return;
         }
     }
 
+    // Limpar busca
+    document.getElementById('busca-produto').value = '';
+    document.getElementById('resultado-busca').innerHTML = '';
+    
     atualizarCarrinho();
-    mostrarNotificacao(`${produto.nome} adicionado ao carrinho!`, 'success');
-
-    // 🚀 Limpar resultados de busca depois de adicionar
-    const resultadoDiv = document.getElementById('resultado-busca');
-    if (resultadoDiv) {
-        resultadoDiv.innerHTML = '';
-    }
 }
-
 
 function atualizarCarrinho() {
     const tbody = document.getElementById('carrinho-itens');

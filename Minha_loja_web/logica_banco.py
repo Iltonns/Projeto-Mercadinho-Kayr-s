@@ -23,7 +23,7 @@ def sanitizar_input(texto):
     """Remove caracteres perigosos e espaços extras"""
     if not texto:
         return ""
-    # Remove tags HTML e espaços 
+    # Remove tags HTML e espaços extras
     texto = re.sub(r'<[^>]*>', '', texto)
     texto = texto.strip()
     return texto
@@ -288,7 +288,7 @@ def get_user_by_username(username):
 
 # --- FUNÇÕES DE PRODUTOS MELHORADAS E CORRIGIDAS ---
 def listar_produtos():
-    """Lista todos os produtos com tratamento de erro - CORRIGIDA"""
+    """Lista todos os produtos - CORRIGIDA"""
     db = DatabaseManager()
     
     if not db.connect():
@@ -296,7 +296,9 @@ def listar_produtos():
         
     produtos = db.fetch_all("SELECT * FROM produtos ORDER BY nome")
     db.disconnect()
-    return produtos  # Já convertido para dicionários pelo DatabaseManager
+    
+    # CORREÇÃO: Converter cada Row para dicionário
+    return [dict(produto) for produto in produtos]
 
 def adicionar_produto(nome, preco, quantidade, codigo_barras=None):
     """Adiciona produto com validações"""
@@ -362,7 +364,11 @@ def buscar_produto_por_id(id):
         
     produto = db.fetch_one("SELECT * FROM produtos WHERE id = ?", (id,))
     db.disconnect()
-    return produto  # Já convertido para dicionário pelo DatabaseManager
+    
+    # CORREÇÃO: Converter para dicionário
+    if produto:
+        return dict(produto)
+    return None
 
 def buscar_produto_por_codigo(codigo):
     """Busca produto por código ou nome - CORRIGIDA"""
@@ -373,11 +379,15 @@ def buscar_produto_por_codigo(codigo):
         return None
         
     produto = db.fetch_one(
-        "SELECT * FROM produtos WHERE codigo_barras = ? OR nome LIKE ?", 
+        "SELECT * FROM produtos WHERE LOWER(codigo_barras) = LOWER(?) OR LOWER(nome) LIKE LOWER(?)", 
         (codigo, f'%{codigo}%')
     )
     db.disconnect()
-    return produto  # Já convertido para dicionário pelo DatabaseManager
+    
+    # CORREÇÃO: Converter sqlite3.Row para dicionário
+    if produto:
+        return dict(produto)  # ← ESTA LINHA É ESSENCIAL
+    return None
 
 def atualizar_produto(id, nome, preco, quantidade, codigo_barras=None):
     """Atualiza produto com validações"""
@@ -460,7 +470,9 @@ def listar_clientes():
         
     clientes = db.fetch_all("SELECT * FROM clientes ORDER BY nome")
     db.disconnect()
-    return clientes  # Já convertido para dicionários pelo DatabaseManager
+    
+    # CORREÇÃO: Converter cada Row para dicionário
+    return [dict(cliente) for cliente in clientes]
 
 def adicionar_cliente(nome, telefone, email):
     """Adiciona cliente com validações"""
@@ -566,7 +578,7 @@ def excluir_cliente(id):
 
 # --- FUNÇÕES DE VENDAS MELHORADAS ---
 def registrar_venda_completa(cliente_id, itens_carrinho, total, forma_pagamento, valor_pago, troco):
-    """Registra venda completa com transação segura - CORRIGIDA"""
+    """Registra venda completa com transação segura"""
     if not itens_carrinho:
         return None, "Carrinho vazio"
     
@@ -581,15 +593,6 @@ def registrar_venda_completa(cliente_id, itens_carrinho, total, forma_pagamento,
     venda_id = None
     try:
         data_venda = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        # CORREÇÃO: Verificar estoque ANTES de iniciar a transação
-        for item in itens_carrinho:
-            produto = buscar_produto_por_id(item['id'])
-            if not produto:
-                return None, f"Produto ID {item['id']} não encontrado"
-            
-            if produto['quantidade'] < item['qtd']:
-                return None, f"Estoque insuficiente para {produto['nome']}. Disponível: {produto['quantidade']}, Solicitado: {item['qtd']}"
         
         # Iniciar transação
         cursor = db.execute_query(
@@ -606,8 +609,15 @@ def registrar_venda_completa(cliente_id, itens_carrinho, total, forma_pagamento,
         # Registrar itens da venda e atualizar estoque
         for item in itens_carrinho:
             produto = buscar_produto_por_id(item['id'])
+            if not produto:
+                db.conn.rollback()
+                return None, f"Produto ID {item['id']} não encontrado"
             
-            # CORREÇÃO: Registrar item da venda
+            if produto['quantidade'] < item['qtd']:
+                db.conn.rollback()
+                return None, f"Estoque insuficiente para {produto['nome']}"
+            
+            # Registrar item da venda
             cursor_item = db.execute_query(
                 "INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario) VALUES (?, ?, ?, ?)", 
                 (venda_id, item['id'], item['qtd'], produto['preco'])
@@ -617,14 +627,8 @@ def registrar_venda_completa(cliente_id, itens_carrinho, total, forma_pagamento,
                 db.conn.rollback()
                 return None, "Erro ao registrar item da venda"
             
-            # CORREÇÃO: Atualizar estoque de forma mais segura
+            # Atualizar estoque
             nova_quantidade = produto['quantidade'] - item['qtd']
-            
-            # Verificar se a quantidade não fica negativa
-            if nova_quantidade < 0:
-                db.conn.rollback()
-                return None, f"Erro: Estoque ficaria negativo para {produto['nome']}"
-            
             cursor_estoque = db.execute_query(
                 "UPDATE produtos SET quantidade = ?, data_atualizacao = CURRENT_TIMESTAMP WHERE id = ?", 
                 (nova_quantidade, item['id'])
@@ -632,7 +636,7 @@ def registrar_venda_completa(cliente_id, itens_carrinho, total, forma_pagamento,
             
             if not cursor_estoque:
                 db.conn.rollback()
-                return None, f"Erro ao atualizar estoque do produto {produto['nome']}"
+                return None, "Erro ao atualizar estoque"
             
             # Registrar saída no histórico
             db.execute_query(
@@ -646,7 +650,6 @@ def registrar_venda_completa(cliente_id, itens_carrinho, total, forma_pagamento,
     except Exception as e:
         if db.conn:
             db.conn.rollback()
-        print(f"❌ ERRO DETALHADO na venda: {str(e)}")  # Log detalhado
         return None, f"Erro ao registrar venda: {str(e)}"
     finally:
         db.disconnect()
@@ -671,7 +674,9 @@ def get_relatorio_vendas_detalhado():
     """
     vendas = db.fetch_all(query)
     db.disconnect()
-    return vendas  # Já convertido para dicionários pelo DatabaseManager
+    
+    # CORREÇÃO: Converter para dicionários
+    return [dict(venda) for venda in vendas]
 
 def get_relatorio_estoque():
     """Relatório de estoque - CORRIGIDA"""
