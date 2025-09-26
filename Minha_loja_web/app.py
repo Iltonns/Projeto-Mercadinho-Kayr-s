@@ -431,7 +431,6 @@ def buscar_produto_caixa():
         return jsonify({'success': False, 'message': 'Erro interno do servidor'})
 
 
-
 @app.route('/buscar_produto_estoque', methods=['POST'])
 @login_required
 def buscar_produto_estoque():
@@ -478,108 +477,6 @@ def buscar_produto_estoque():
 
     except Exception as e:
         print(f"Erro na busca estoque: {e}")
-        return jsonify({'success': False, 'message': 'Erro interno do servidor'})
-
-
-# ==============================================================================
-# 9.1 ROTAS DE BUSCA DE PRODUTOS - AJUSTADAS PARA LISTA
-# ==============================================================================
-
-@app.route('/buscar_produto_caixa', methods=['POST'])
-@login_required
-def buscar_produto_caixa():
-    """Busca de produtos para o caixa - retorna lista"""
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'success': False, 'message': 'Dados inválidos'})
-        
-        codigo = sanitizar_input(data.get('codigo', ''))
-        
-        if not codigo:
-            return jsonify({'success': False, 'message': 'Código ou nome do produto é obrigatório'})
-        
-        produtos_encontrados = []
-
-        # Buscar por código exato
-        produto = db.buscar_produto_por_codigo(codigo)
-        if produto:
-            produtos_encontrados.append(produto)
-        
-        # Buscar por nome (todos os que batem)
-        todos_produtos = db.listar_produtos()
-        for prod in todos_produtos:
-            if codigo.lower() in prod['nome'].lower():
-                produtos_encontrados.append(prod)
-
-        if produtos_encontrados:
-            return jsonify({
-                'success': True,
-                'produtos': [
-                    {
-                        'id': p['id'],
-                        'nome': p['nome'],
-                        'preco': p['preco'],
-                        'quantidade': p['quantidade'],
-                        'codigo': p.get('codigo_barras', '')
-                    }
-                    for p in produtos_encontrados
-                ]
-            })
-        else:
-            return jsonify({'success': False, 'message': 'Nenhum produto encontrado'})
-    
-    except Exception as e:
-        print(f"Erro na busca: {e}")
-        return jsonify({'success': False, 'message': 'Erro interno do servidor'})
-
-
-@app.route('/buscar_produto_estoque', methods=['POST'])
-@login_required
-def buscar_produto_estoque():
-    """Busca de produtos para o estoque - retorna lista"""
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'success': False, 'message': 'Dados inválidos'})
-        
-        codigo = sanitizar_input(data.get('codigo', ''))
-        
-        if not codigo:
-            return jsonify({'success': False, 'message': 'Código ou nome do produto é obrigatório'})
-        
-        produtos_encontrados = []
-
-        # Buscar por código exato
-        produto = db.buscar_produto_por_codigo(codigo)
-        if produto:
-            produtos_encontrados.append(produto)
-        
-        # Buscar por nome (todos os que batem)
-        todos_produtos = db.listar_produtos()
-        for prod in todos_produtos:
-            if codigo.lower() in prod['nome'].lower():
-                produtos_encontrados.append(prod)
-
-        if produtos_encontrados:
-            return jsonify({
-                'success': True,
-                'produtos': [
-                    {
-                        'id': p['id'],
-                        'nome': p['nome'],
-                        'preco': p['preco'],
-                        'quantidade': p['quantidade'],
-                        'codigo': p.get('codigo_barras', '')
-                    }
-                    for p in produtos_encontrados
-                ]
-            })
-        else:
-            return jsonify({'success': False, 'message': 'Nenhum produto encontrado'})
-    
-    except Exception as e:
-        print(f"Erro na busca: {e}")
         return jsonify({'success': False, 'message': 'Erro interno do servidor'})
 
 
